@@ -464,6 +464,20 @@
   }
   #planet3d-loader.hidden { display: none; }
 
+  /* While in planet/sun detail view, only the planet info card + close button
+     stay visible. Hide every other piece of UI chrome so the focus is the body. */
+  body.detail-open #info-panel,
+  body.detail-open #controls-panel,
+  body.detail-open #legend-panel,
+  body.detail-open #side-panels,
+  body.detail-open #zoom-ctrl,
+  body.detail-open #menu-toggle,
+  body.detail-open #menu-backdrop,
+  body.detail-open #tooltip,
+  body.detail-open .planet-label {
+    display: none !important;
+  }
+
   /* ---- Intro modal (page load) ----
      Hidden entirely in embed mode (?embed=1) so the modal never flashes
      when iframed on an external page. */
