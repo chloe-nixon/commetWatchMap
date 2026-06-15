@@ -56,6 +56,52 @@
   #controls-panel { top: 16px; right: 16px; width: 240px; }
   #legend-panel { bottom: 16px; left: 16px; max-width: 280px; }
 
+  /* ---- Collapsible panel header ---- */
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    margin: -3px 0;        /* slightly bigger tap target without changing layout */
+    padding: 3px 0;
+    gap: 12px;
+  }
+  .panel-header-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    color: rgba(255,255,255,0.96);
+    flex: 1;
+    min-width: 0;
+  }
+  .panel-header-chevron {
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.55);
+    font-size: 16px; line-height: 1;
+    transition: transform 0.25s ease;
+    margin-right: -4px;
+  }
+  .panel.collapsible.collapsed .panel-header-chevron {
+    transform: rotate(-90deg);
+  }
+  .panel-body {
+    margin-top: 10px;
+    overflow: hidden;
+    max-height: 1200px;
+    opacity: 1;
+    transition: max-height 0.3s ease, opacity 0.18s ease, margin-top 0.2s ease;
+  }
+  .panel.collapsible.collapsed .panel-body {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    pointer-events: none;
+  }
+
   .control-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; gap: 8px; }
   .control-row label { font-size: 12px; color: rgba(255,255,255,0.85); font-weight: 400; }
 
@@ -441,6 +487,116 @@
   }
   #intro-button:hover { background: linear-gradient(180deg, #ffffff 0%, #d8d8dc 100%); }
   #intro-button:active { transform: scale(0.97); }
+
+  /* =====================================================================
+     MOBILE / NARROW VIEWPORT
+     ===================================================================== */
+  @media (max-width: 768px) {
+    .panel {
+      padding: 12px 14px;
+      border-radius: 16px;
+      font-size: 12px;
+      max-width: none;
+    }
+    .panel-header-title { font-size: 12.5px; }
+    .panel .sub { font-size: 11px; }
+    .panel .stat { font-size: 11.5px; }
+
+    /* Top row: two compact panels, splitting the screen evenly. */
+    #info-panel {
+      top: 12px;
+      left: 12px;
+      right: auto;
+      width: calc(50vw - 18px);
+      max-width: 220px;
+    }
+    #controls-panel {
+      top: 12px;
+      right: 12px;
+      left: auto;
+      width: calc(50vw - 18px);
+      max-width: 220px;
+    }
+    /* Legend sits along the bottom-left, narrow. */
+    #legend-panel {
+      bottom: 76px;            /* clear the zoom buttons */
+      left: 12px;
+      right: 12px;
+      max-width: none;
+    }
+
+    /* Zoom controls: bigger tap targets, bottom-right. */
+    #zoom-ctrl { bottom: 12px; right: 12px; gap: 8px; }
+    .zbtn { width: 44px; height: 44px; font-size: 22px; }
+
+    /* Tooltip becomes a bottom sheet on mobile — pinned, not following the comet. */
+    #tooltip {
+      left: 12px !important;
+      right: 12px !important;
+      bottom: 144px !important;   /* sits above the (collapsed) legend + zoom buttons */
+      top: auto !important;
+      max-width: none;
+      width: auto;
+      transform: none !important;
+      padding: 14px 16px;
+    }
+    #tooltip-close {
+      top: 8px; right: 12px;
+      font-size: 22px;
+      padding: 6px 10px;
+    }
+    .popup-title { font-size: 13.5px; padding-right: 28px; }
+    .popup-row { font-size: 12px; }
+
+    /* Intro modal fits small screens. */
+    #intro { padding: 16px; }
+    #intro-card {
+      padding: 24px 22px 22px;
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      border-radius: 18px;
+    }
+    #intro h1 { font-size: 22px; }
+    #intro p { font-size: 12.5px; }
+    #intro-button { width: 100%; padding: 13px; }
+
+    /* Planet/Sun detail overlay → bottom sheet style on mobile. */
+    #planet3d-info {
+      top: auto;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      max-width: none;
+      padding: 18px 20px;
+      border-radius: 18px;
+      max-height: 50vh;
+      overflow-y: auto;
+    }
+    #planet3d-info h2 { font-size: 26px; margin-bottom: 10px; }
+    #planet3d-info .row { padding: 6px 0; }
+    #planet3d-info .desc { font-size: 12px; }
+    #planet3d-close { top: 16px; right: 16px; width: 40px; height: 40px; }
+    #planet3d-hint { display: none; }   /* tap hints don't apply on touch */
+
+    /* Hide the planet labels on mobile — they tend to crowd at tight zooms. */
+    .planet-label { font-size: 9.5px; letter-spacing: 1.2px; }
+  }
+
+  /* Very small phones — single-column top row, no side-by-side. */
+  @media (max-width: 420px) {
+    #info-panel {
+      width: calc(100vw - 24px);
+      max-width: none;
+    }
+    #controls-panel {
+      width: calc(100vw - 24px);
+      max-width: none;
+      /* When info-panel is expanded, controls would overlap — but both are
+         collapsed by default on mobile so they stack as small pills. */
+      top: 60px;
+    }
+    /* Once controls is expanded, push it down via JS (handled in script). */
+  }
 </style>
 </head>
 <body>
@@ -457,38 +613,52 @@
   <div class="spinner"></div>
 </div>
 
-<div id="info-panel" class="panel">
-  <h1>Solar System Comet Tracker</h1>
-  <div class="sub">NASA JPL Small-Body Database</div>
-  <div class="stat">Comets plotted: <b id="comet-count">…</b></div>
-  <div class="stat">Planets: <b>8</b> &nbsp; Sun: <b>1</b></div>
-  <div class="credit">Data: <a href="https://ssd-api.jpl.nasa.gov/" target="_blank" rel="noopener">ssd-api.jpl.nasa.gov</a></div>
-</div>
-
-<div id="controls-panel" class="panel">
-  <h1 style="font-size: 12px;">Controls</h1>
-  <div class="sub">Orbital period filter</div>
-  <div class="filter-group" id="period-filter">
-    <button class="filter-btn active" data-period="all">All</button>
-    <button class="filter-btn" data-period="short">&lt; 20 yr</button>
-    <button class="filter-btn" data-period="halley">20–200 yr</button>
+<div id="info-panel" class="panel collapsible">
+  <div class="panel-header">
+    <div class="panel-header-title">Solar System Comet Tracker</div>
+    <div class="panel-header-chevron" aria-hidden="true">⌄</div>
   </div>
-  <div class="control-row">
-    <label>All comet orbits</label>
-    <input type="checkbox" class="toggle" id="toggle-orbits" checked />
-  </div>
-  <div class="control-row">
-    <label>Planet labels</label>
-    <input type="checkbox" class="toggle" id="toggle-labels" checked />
-  </div>
-  <div class="control-row">
-    <label>Planet orbital rings</label>
-    <input type="checkbox" class="toggle" id="toggle-rings" checked />
+  <div class="panel-body">
+    <div class="sub">NASA JPL Small-Body Database</div>
+    <div class="stat">Comets plotted: <b id="comet-count">…</b></div>
+    <div class="stat">Planets: <b>8</b> &nbsp; Sun: <b>1</b></div>
+    <div class="credit">Data: <a href="https://ssd-api.jpl.nasa.gov/" target="_blank" rel="noopener">ssd-api.jpl.nasa.gov</a></div>
   </div>
 </div>
 
-<div id="legend-panel" class="panel">
-  <div class="sub" style="margin-bottom: 6px;">Legend</div>
+<div id="controls-panel" class="panel collapsible">
+  <div class="panel-header">
+    <div class="panel-header-title">Controls</div>
+    <div class="panel-header-chevron" aria-hidden="true">⌄</div>
+  </div>
+  <div class="panel-body">
+    <div class="sub">Orbital period filter</div>
+    <div class="filter-group" id="period-filter">
+      <button class="filter-btn active" data-period="all">All</button>
+      <button class="filter-btn" data-period="short">&lt; 20 yr</button>
+      <button class="filter-btn" data-period="halley">20–200 yr</button>
+    </div>
+    <div class="control-row">
+      <label>All comet orbits</label>
+      <input type="checkbox" class="toggle" id="toggle-orbits" checked />
+    </div>
+    <div class="control-row">
+      <label>Planet labels</label>
+      <input type="checkbox" class="toggle" id="toggle-labels" checked />
+    </div>
+    <div class="control-row">
+      <label>Planet orbital rings</label>
+      <input type="checkbox" class="toggle" id="toggle-rings" checked />
+    </div>
+  </div>
+</div>
+
+<div id="legend-panel" class="panel collapsible">
+  <div class="panel-header">
+    <div class="panel-header-title">Legend</div>
+    <div class="panel-header-chevron" aria-hidden="true">⌄</div>
+  </div>
+  <div class="panel-body">
   <div style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:10px;height:10px;border-radius:50%;background:#FDB813;box-shadow:0 0 6px #FDB813;"></span> Sun</div>
   <div style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:8px;height:8px;border-radius:50%;background:#4a90e2;"></span> Planet</div>
 
@@ -503,6 +673,7 @@
   </div>
 
   <div class="credit">Drag to orbit · Scroll to zoom · Click to inspect</div>
+  </div>
 </div>
 
 <div id="zoom-ctrl">
@@ -1257,11 +1428,17 @@ function hideTooltip() {
 }
 
 const _tooltipVec = new THREE.Vector3();
+function isMobileViewport() { return window.innerWidth <= 768; }
 function updateTooltipPosition() {
   if (selectedCometIdx === null) return;
+  const t = document.getElementById('tooltip');
+  // On mobile, CSS pins the tooltip as a bottom sheet — skip the screen-projection math.
+  if (isMobileViewport()) {
+    t.style.visibility = 'visible';
+    return;
+  }
   const c = comets[selectedCometIdx];
   _tooltipVec.set(c.sx, c.sy, c.sz).project(camera);
-  const t = document.getElementById('tooltip');
   // Behind the camera or off the clip volume → hide.
   if (_tooltipVec.z > 1 || _tooltipVec.z < -1) { t.style.visibility = 'hidden'; return; }
   t.style.visibility = 'visible';
@@ -1575,6 +1752,20 @@ function wireUI() {
   });
 
   document.getElementById('tooltip-close').onclick = clearSelection;
+
+  // Collapsible panels — tap any panel-header to expand/close its body.
+  for (const panel of document.querySelectorAll('.panel.collapsible')) {
+    const header = panel.querySelector('.panel-header');
+    if (!header) continue;
+    header.addEventListener('click', () => panel.classList.toggle('collapsed'));
+  }
+  // On narrow viewports, start every panel collapsed so the scene is visible.
+  // Visitors tap a header to open the panel they want.
+  if (isMobileViewport()) {
+    for (const panel of document.querySelectorAll('.panel.collapsible')) {
+      panel.classList.add('collapsed');
+    }
+  }
 }
 
 /* =========================================================================
