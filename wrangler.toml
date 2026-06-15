@@ -9,6 +9,6 @@
 # Local dev:     npx wrangler pages dev .
 # CI/CD:         connect this repo via the Cloudflare Pages dashboard.
 
-name = "solar-comet-tracker"
+name = "commetwatchmap"
 compatibility_date = "2026-06-15"
 pages_build_output_dir = "."
