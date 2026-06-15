@@ -353,10 +353,13 @@
   .credit a { color: rgba(255,255,255,0.65); text-decoration: none; }
   .credit a:hover { color: rgba(255,255,255,0.92); }
 
-  /* ---------- 3D planet overlay ---------- */
+  /* ---------- 3D planet overlay ----------
+     Background is transparent — the planet/sun renders on its own canvas
+     above the main scene, but the main scene (comets, planets, orbit lines,
+     starfield) stays fully visible behind. */
   #planet3d {
     position: fixed; inset: 0;
-    background: radial-gradient(ellipse at center, #050810 0%, #000 80%);
+    background: transparent;
     z-index: 200;
     display: flex;
     opacity: 0;
@@ -1896,9 +1899,11 @@ let p3 = {
 function ensureRenderer() {
   if (p3.renderer) return;
   const canvas = document.getElementById('planet3d-canvas');
-  p3.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  // alpha: true + setClearAlpha(0) lets the main scene canvas show through.
+  p3.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   p3.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   p3.renderer.outputEncoding = THREE.sRGBEncoding;
+  p3.renderer.setClearAlpha(0);
 }
 
 function buildStars() {
@@ -1976,9 +1981,9 @@ function openPlanet3D(planet) {
   overlay.classList.add('visible');
   document.getElementById('planet3d-loader').classList.remove('hidden');
 
-  // Scene + camera
+  // Scene + camera. No scene.background — renderer clears with alpha 0, so the
+  // main solar-system scene (comets, planets, orbit lines, stars) stays visible behind.
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000004);
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
   camera.position.set(0, 0.6, 4.2);
 
@@ -2130,8 +2135,8 @@ function openSun3D() {
   overlay.classList.add('visible');
   document.getElementById('planet3d-loader').classList.remove('hidden');
 
+  // No scene.background — alpha-clear lets the main scene show through.
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000004);
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
   camera.position.set(0, 0.6, 5.0);
 
