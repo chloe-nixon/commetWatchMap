@@ -1844,6 +1844,13 @@ function flyCameraToBody(bodyPos, bodyRadius) {
     };
   }
 
+  // CRITICAL: open the orbit limits to the saved wide-view range BEFORE the lerp
+  // starts. Otherwise OrbitControls.update() clamps the camera every frame to
+  // the *previous* destination's tight limits, fighting the lerp and producing
+  // a stuck-then-jump motion. Destination limits are applied on flight completion.
+  controls.minDistance = savedCameraState.minDistance;
+  controls.maxDistance = savedCameraState.maxDistance;
+
   // Camera lands further-out along the radial direction from the sun, slightly above
   // the ecliptic, so the lit (sun-facing) hemisphere of the planet is what we see.
   const outward = new THREE.Vector3();
@@ -1866,6 +1873,7 @@ function flyCameraToBody(bodyPos, bodyRadius) {
     t0: performance.now(),
     duration: 1300,
     onComplete: () => {
+      // Now tighten the orbit range so the user can spin/zoom right around the body.
       controls.minDistance = bodyRadius * 1.5;
       controls.maxDistance = bodyRadius * 25;
     },
@@ -1875,6 +1883,10 @@ function flyCameraToBody(bodyPos, bodyRadius) {
 
 function flyCameraHome() {
   if (!savedCameraState) return;
+  // Restore wide-view limits BEFORE the return lerp so the camera isn't held back
+  // by the planet-context tight maxDistance during the trip out.
+  controls.minDistance = savedCameraState.minDistance;
+  controls.maxDistance = savedCameraState.maxDistance;
   cameraFlight = {
     startPos: camera.position.clone(),
     endPos: savedCameraState.position.clone(),
@@ -1883,8 +1895,6 @@ function flyCameraHome() {
     t0: performance.now(),
     duration: 1100,
     onComplete: () => {
-      controls.minDistance = savedCameraState.minDistance;
-      controls.maxDistance = savedCameraState.maxDistance;
       savedCameraState = null;
     },
   };
@@ -1908,10 +1918,7 @@ function tickCameraFlight() {
 function animate() {
   requestAnimationFrame(animate);
   tickCameraFlight();
-  // Skip OrbitControls.update() while a camera flight is in progress — otherwise
-  // its min/maxDistance clamps would fight the lerp and the camera would "stick"
-  // near the planet, then jump to the wide view the moment onComplete restores limits.
-  if (!cameraFlight) controls.update();
+  controls.update();
 
   if (starField) starField.rotation.y += 0.00005;
 
