@@ -4,6 +4,14 @@
 <meta charset="UTF-8" />
 <title>Solar System Comet Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script>
+  // Embed mode — set on <html> before any rendering, so the intro modal
+  // never flashes when iframed. Usage: append ?embed=1 to the URL,
+  // e.g. <iframe src="https://commetwatch.com/?embed=1">.
+  if (new URLSearchParams(location.search).has('embed')) {
+    document.documentElement.classList.add('embed-mode');
+  }
+</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <style>
@@ -165,8 +173,17 @@
       0 1px 2px rgba(0,0,0,0.25);
   }
 
-  /* Zoom buttons — circular glass discs. */
-  #zoom-ctrl { position: absolute; bottom: 24px; right: 24px; z-index: 5; display: flex; flex-direction: column; gap: 8px; }
+  /* Zoom buttons — circular glass discs. Credit pill stacks beneath them. */
+  #zoom-ctrl {
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;   /* each child sized to itself, right-aligned */
+    gap: 8px;
+  }
   .zbtn {
     width: 38px; height: 38px;
     background:
@@ -195,12 +212,9 @@
       rgba(28, 28, 34, 0.5); }
   .zbtn:active { transform: scale(0.94); }
 
-  /* Credit / contact pill — bottom-right above zoom controls on desktop. */
+  /* Credit / contact pill — sits inside #zoom-ctrl as the last child,
+     so it appears directly beneath the + / − buttons in the same stack. */
   #credit-link {
-    position: fixed;
-    bottom: 116px;          /* sits just above the zoom button stack */
-    right: 24px;
-    z-index: 5;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -444,7 +458,11 @@
   }
   #planet3d-loader.hidden { display: none; }
 
-  /* ---- Intro modal (page load) ---- */
+  /* ---- Intro modal (page load) ----
+     Hidden entirely in embed mode (?embed=1) so the modal never flashes
+     when iframed on an external page. */
+  html.embed-mode #intro { display: none !important; }
+
   #intro {
     position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.55);
@@ -543,28 +561,19 @@
     .panel .sub { font-size: 11px; }
     .panel .stat { font-size: 11.5px; }
 
-    /* Credit pill moves to top-center on mobile so it's not crowded by zoom/tooltip. */
-    #credit-link {
-      bottom: auto;
-      right: auto;
-      top: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 7px 14px;
-      font-size: 11px;
-    }
-    #credit-link:active { transform: translateX(-50%) scale(0.96); }
+    /* Credit pill stays in the zoom stack on mobile too — just shrink it a touch. */
+    #credit-link { padding: 7px 14px; font-size: 11px; }
 
-    /* Top row: two compact panels, splitting the screen evenly — pushed below the credit pill. */
+    /* Top row: two compact panels, splitting the screen evenly. */
     #info-panel {
-      top: 60px;
+      top: 12px;
       left: 12px;
       right: auto;
       width: calc(50vw - 18px);
       max-width: 220px;
     }
     #controls-panel {
-      top: 60px;
+      top: 12px;
       right: 12px;
       left: auto;
       width: calc(50vw - 18px);
@@ -645,7 +654,7 @@
       width: calc(100vw - 24px);
       max-width: none;
       /* Stack the controls panel beneath info (both collapsed by default = short headers). */
-      top: 116px;
+      top: 68px;
     }
   }
 </style>
@@ -730,12 +739,11 @@
 <div id="zoom-ctrl">
   <button class="zbtn" id="zin">+</button>
   <button class="zbtn" id="zout">−</button>
+  <a id="credit-link" href="https://chloenixon.com" target="_blank" rel="noopener" aria-label="Built by Chloe Nixon — opens chloenixon.com in a new tab">
+    <span class="credit-text">Built by Chloe Nixon</span>
+    <span class="credit-arrow" aria-hidden="true">↗</span>
+  </a>
 </div>
-
-<a id="credit-link" href="https://chloenixon.com" target="_blank" rel="noopener" aria-label="Built by Chloe Nixon — opens chloenixon.com in a new tab">
-  <span class="credit-text">Built by Chloe Nixon</span>
-  <span class="credit-arrow" aria-hidden="true">↗</span>
-</a>
 
 <div id="planet3d">
   <canvas id="planet3d-canvas"></canvas>
