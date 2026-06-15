@@ -1099,11 +1099,19 @@ function loadSceneTex(url) {
   return t;
 }
 
-// Real sidereal rotation in hours → scene radians/sec, compressed so it reads at a glance.
+// Real sidereal rotation in hours → scene radians/sec.
+// Real periods span four orders of magnitude (Jupiter 9.93 hr ↔ Venus 5832 hr),
+// so a linear time-compression would either spin Jupiter too fast or leave
+// Mercury/Venus visually stationary. Log compression keeps the speed ordering
+// (Jupiter fastest, Venus slowest) but lifts slow rotators into a 35-45 sec/rev
+// visible range while keeping Jupiter near 11 sec/rev.
 const SCENE_SPIN_COMPRESS = 3000;
 function sceneSpinRate(spinHrs) {
   if (!isFinite(spinHrs) || spinHrs === 0) return 0;
-  return (2 * Math.PI) / (spinHrs * 3600) * SCENE_SPIN_COMPRESS;
+  const sign = Math.sign(spinHrs);            // preserve retrograde direction
+  const absHrs = Math.abs(spinHrs);
+  const visualHrs = Math.log(1 + absHrs) * 4; // log compression of dynamic range
+  return sign * (2 * Math.PI) / (visualHrs * 3600) * SCENE_SPIN_COMPRESS;
 }
 
 function buildSun() {
