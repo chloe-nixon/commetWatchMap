@@ -1908,7 +1908,10 @@ function tickCameraFlight() {
 function animate() {
   requestAnimationFrame(animate);
   tickCameraFlight();
-  controls.update();
+  // Skip OrbitControls.update() while a camera flight is in progress — otherwise
+  // its min/maxDistance clamps would fight the lerp and the camera would "stick"
+  // near the planet, then jump to the wide view the moment onComplete restores limits.
+  if (!cameraFlight) controls.update();
 
   if (starField) starField.rotation.y += 0.00005;
 
