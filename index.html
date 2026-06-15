@@ -195,6 +195,47 @@
       rgba(28, 28, 34, 0.5); }
   .zbtn:active { transform: scale(0.94); }
 
+  /* Credit / contact pill — bottom-right above zoom controls on desktop. */
+  #credit-link {
+    position: fixed;
+    bottom: 116px;          /* sits just above the zoom button stack */
+    right: 24px;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background:
+      linear-gradient(135deg,
+        rgba(255,255,255,0.10) 0%,
+        rgba(255,255,255,0.02) 45%,
+        rgba(255,255,255,0.06) 100%),
+      rgba(16, 16, 22, 0.42);
+    border: 0.5px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border-radius: 999px;
+    color: rgba(255,255,255,0.88);
+    font-size: 11.5px;
+    font-weight: 500;
+    text-decoration: none;
+    letter-spacing: -0.003em;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 2px 6px rgba(0,0,0,0.25),
+      0 8px 20px rgba(0,0,0,0.35);
+    transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #credit-link:hover {
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.14)),
+      rgba(28, 28, 34, 0.55);
+    color: #fff;
+  }
+  #credit-link:active { transform: scale(0.96); }
+  #credit-link .credit-arrow { font-size: 12px; opacity: 0.7; line-height: 1; }
+
   /* Loading */
   #loading {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -502,16 +543,28 @@
     .panel .sub { font-size: 11px; }
     .panel .stat { font-size: 11.5px; }
 
-    /* Top row: two compact panels, splitting the screen evenly. */
-    #info-panel {
+    /* Credit pill moves to top-center on mobile so it's not crowded by zoom/tooltip. */
+    #credit-link {
+      bottom: auto;
+      right: auto;
       top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 7px 14px;
+      font-size: 11px;
+    }
+    #credit-link:active { transform: translateX(-50%) scale(0.96); }
+
+    /* Top row: two compact panels, splitting the screen evenly — pushed below the credit pill. */
+    #info-panel {
+      top: 60px;
       left: 12px;
       right: auto;
       width: calc(50vw - 18px);
       max-width: 220px;
     }
     #controls-panel {
-      top: 12px;
+      top: 60px;
       right: 12px;
       left: auto;
       width: calc(50vw - 18px);
@@ -591,11 +644,9 @@
     #controls-panel {
       width: calc(100vw - 24px);
       max-width: none;
-      /* When info-panel is expanded, controls would overlap — but both are
-         collapsed by default on mobile so they stack as small pills. */
-      top: 60px;
+      /* Stack the controls panel beneath info (both collapsed by default = short headers). */
+      top: 116px;
     }
-    /* Once controls is expanded, push it down via JS (handled in script). */
   }
 </style>
 </head>
@@ -680,6 +731,11 @@
   <button class="zbtn" id="zin">+</button>
   <button class="zbtn" id="zout">−</button>
 </div>
+
+<a id="credit-link" href="https://chloenixon.com" target="_blank" rel="noopener" aria-label="Built by Chloe Nixon — opens chloenixon.com in a new tab">
+  <span class="credit-text">Built by Chloe Nixon</span>
+  <span class="credit-arrow" aria-hidden="true">↗</span>
+</a>
 
 <div id="planet3d">
   <canvas id="planet3d-canvas"></canvas>
