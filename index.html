@@ -353,22 +353,25 @@
   .credit a { color: rgba(255,255,255,0.65); text-decoration: none; }
   .credit a:hover { color: rgba(255,255,255,0.92); }
 
-  /* ---------- 3D planet overlay ----------
-     Background is transparent — the planet/sun renders on its own canvas
-     above the main scene, but the main scene (comets, planets, orbit lines,
-     starfield) stays fully visible behind. */
+  /* ---------- Detail overlay (info card + close button) ----------
+     The detail view no longer renders its own sphere — instead the main
+     scene's camera flies to the actual planet/sun in the scene. The overlay
+     is just the floating info card + close button, so it lets pointer events
+     pass through to the main canvas (where OrbitControls lives). */
   #planet3d {
     position: fixed; inset: 0;
     background: transparent;
     z-index: 200;
-    display: flex;
+    display: block;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.35s ease;
   }
-  #planet3d.visible { opacity: 1; pointer-events: auto; }
-  #planet3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
-  #planet3d-canvas:active { cursor: grabbing; }
+  #planet3d.visible { opacity: 1; }
+  #planet3d.visible #planet3d-info,
+  #planet3d.visible #planet3d-close,
+  #planet3d.visible #planet3d-hint { pointer-events: auto; }
+  #planet3d-canvas { display: none; }   /* no longer rendered; main scene takes over */
 
   #planet3d-info {
     position: absolute;
@@ -1823,8 +1826,88 @@ function updatePlanetLabels() {
   }
 }
 
+/* ---------- Camera flight (planet/sun detail view) ---------- */
+
+let cameraFlight = null;          // { startPos, endPos, startTarget, endTarget, t0, duration, onComplete }
+let savedCameraState = null;      // wide-view state to fly back to on close
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+function flyCameraToBody(bodyPos, bodyRadius) {
+  // Stash the wide-view camera state only the first time we enter detail view.
+  // Subsequent planet-to-planet hops keep the same "home" target for the close action.
+  if (!savedCameraState) {
+    savedCameraState = {
+      position: camera.position.clone(),
+      target: controls.target.clone(),
+      minDistance: controls.minDistance,
+      maxDistance: controls.maxDistance,
+    };
+  }
+
+  // Camera lands further-out along the radial direction from the sun, slightly above
+  // the ecliptic, so the lit (sun-facing) hemisphere of the planet is what we see.
+  const outward = new THREE.Vector3();
+  if (bodyPos.lengthSq() < 1e-6) {
+    // Sun: keep approaching from wherever the camera currently is.
+    outward.copy(camera.position).normalize();
+  } else {
+    outward.copy(bodyPos); outward.y = 0; outward.normalize();
+  }
+  const offsetDist = bodyRadius * 4.5;
+  const endPos = bodyPos.clone()
+    .add(outward.multiplyScalar(offsetDist))
+    .add(new THREE.Vector3(0, bodyRadius * 0.8, 0));
+
+  cameraFlight = {
+    startPos: camera.position.clone(),
+    endPos,
+    startTarget: controls.target.clone(),
+    endTarget: bodyPos.clone(),
+    t0: performance.now(),
+    duration: 1300,
+    onComplete: () => {
+      controls.minDistance = bodyRadius * 1.5;
+      controls.maxDistance = bodyRadius * 25;
+    },
+  };
+  controls.enabled = false;
+}
+
+function flyCameraHome() {
+  if (!savedCameraState) return;
+  cameraFlight = {
+    startPos: camera.position.clone(),
+    endPos: savedCameraState.position.clone(),
+    startTarget: controls.target.clone(),
+    endTarget: savedCameraState.target.clone(),
+    t0: performance.now(),
+    duration: 1100,
+    onComplete: () => {
+      controls.minDistance = savedCameraState.minDistance;
+      controls.maxDistance = savedCameraState.maxDistance;
+      savedCameraState = null;
+    },
+  };
+  controls.enabled = false;
+}
+
+function tickCameraFlight() {
+  if (!cameraFlight) return;
+  const t = Math.min(1, (performance.now() - cameraFlight.t0) / cameraFlight.duration);
+  const e = easeOutCubic(t);
+  camera.position.lerpVectors(cameraFlight.startPos, cameraFlight.endPos, e);
+  controls.target.lerpVectors(cameraFlight.startTarget, cameraFlight.endTarget, e);
+  if (t >= 1) {
+    const done = cameraFlight;
+    cameraFlight = null;
+    controls.enabled = true;
+    if (done.onComplete) done.onComplete();
+  }
+}
+
 function animate() {
   requestAnimationFrame(animate);
+  tickCameraFlight();
   controls.update();
 
   if (starField) starField.rotation.y += 0.00005;
@@ -2070,108 +2153,25 @@ function openPlanet3D(planet) {
   const info = PLANET_3D[planet.name];
   if (!info) return;
 
-  ensureRenderer();
-  tearDown3DScene(); // clean any prior planet
+  // Locate the actual planet mesh in the main scene — that's what we'll fly to.
+  const planetEntry = planetMeshes.find(pm => pm.planet.name === planet.name);
+  if (!planetEntry) return;
 
   fillInfoPanel(planet, info);
   const overlay = document.getElementById('planet3d');
   overlay.classList.add('visible');
-  document.body.classList.add('detail-open');   // hides the mobile menu button while in detail view
-  document.body.classList.remove('menu-open');  // and closes the drawer if it was open
-  document.getElementById('planet3d-loader').classList.remove('hidden');
+  document.body.classList.add('detail-open');
+  document.body.classList.remove('menu-open');
+  document.getElementById('planet3d-loader').classList.add('hidden');
 
-  // Scene + camera. No scene.background — renderer clears with alpha 0, so the
-  // main solar-system scene (comets, planets, orbit lines, stars) stays visible behind.
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
-  camera.position.set(0, 0.6, 4.2);
-
-  // Lights — directional acts as the Sun, soft ambient for the dark side.
-  const sun = new THREE.DirectionalLight(0xfff2d0, 1.6);
-  sun.position.set(5, 2, 4);
-  scene.add(sun);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.15));
-
-  // Stars
-  const stars = buildStars();
-  scene.add(stars);
-  p3.starField = stars;
-
-  // Planet sphere
-  const geo = new THREE.SphereGeometry(1, 96, 96);
-  const loader = new THREE.TextureLoader();
-  loader.setCrossOrigin('anonymous');
-  const tex = loader.load(
-    info.tex,
-    () => { document.getElementById('planet3d-loader').classList.add('hidden'); },
-    undefined,
-    (err) => {
-      console.warn('Texture failed, falling back to flat color', err);
-      document.getElementById('planet3d-loader').classList.add('hidden');
-    }
-  );
-  tex.encoding = THREE.sRGBEncoding;
-  tex.anisotropy = p3.renderer.capabilities.getMaxAnisotropy ? p3.renderer.capabilities.getMaxAnisotropy() : 1;
-
-  const mat = new THREE.MeshPhongMaterial({
-    map: tex,
-    color: 0xffffff,
-    shininess: planet.name === 'Earth' ? 14 : 5,
-    specular: 0x222222,
-  });
-
-  const planetMesh = new THREE.Mesh(geo, mat);
-  planetMesh.rotation.z = info.tilt * Math.PI / 180;
-  scene.add(planetMesh);
-
-  p3.disposables.push(geo, mat, tex);
-  p3.planetMesh = planetMesh;
-
-  // Saturn rings
-  if (info.ring) {
-    const ring = buildSaturnRings(info.ring);
-    planetMesh.add(ring);   // inherit tilt
-    p3.ringMesh = ring;
-  }
-
-  // Controls
-  const controls = new THREE.OrbitControls(camera, p3.renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.06;
-  controls.rotateSpeed = 0.55;
-  controls.minDistance = 1.6;
-  controls.maxDistance = 12;
-  controls.enablePan = false;
-
-  // Spin rate: full revolution per `spinHrs` real hours, compressed × 1000.
-  // Sign preserved so retrograde rotators spin the opposite way.
-  const compress = 1000;
-  p3.spinPerSec = (2 * Math.PI) / (info.spinHrs * 3600) * compress;
-
-  p3.scene = scene;
-  p3.camera = camera;
-  p3.controls = controls;
-
-  resize3D();
-  if (!p3.resizeHandler) {
-    p3.resizeHandler = () => resize3D();
-    window.addEventListener('resize', p3.resizeHandler);
-  }
+  // Bind Esc to close the detail view (idempotent — only attaches once).
   if (!p3.escHandler) {
     p3.escHandler = (e) => { if (e.key === 'Escape') closePlanet3D(); };
     window.addEventListener('keydown', p3.escHandler);
   }
 
-  let last = performance.now();
-  const tick = (now) => {
-    const dt = (now - last) / 1000; last = now;
-    if (p3.planetMesh) p3.planetMesh.rotation.y += p3.spinPerSec * dt;
-    if (p3.starField)  p3.starField.rotation.y += dt * 0.005;
-    p3.controls.update();
-    p3.renderer.render(p3.scene, p3.camera);
-    p3.rafId = requestAnimationFrame(tick);
-  };
-  p3.rafId = requestAnimationFrame(tick);
+  // Fly the main scene camera to the actual planet's location.
+  flyCameraToBody(planetEntry.mesh.position, planetEntry.sphereR);
 }
 
 function resize3D() {
@@ -2217,9 +2217,6 @@ function tearDown3DScene() {
    ========================================================================= */
 
 function openSun3D() {
-  ensureRenderer();
-  tearDown3DScene();
-
   // Info panel — bespoke copy since the Sun isn't part of PLANETS.
   document.getElementById('p3-eyebrow').textContent = 'Star · Center of the solar system';
   document.getElementById('p3-name').textContent = 'Sun';
@@ -2232,118 +2229,24 @@ function openSun3D() {
 
   const overlay = document.getElementById('planet3d');
   overlay.classList.add('visible');
-  document.body.classList.add('detail-open');   // hides the mobile menu button while in detail view
-  document.body.classList.remove('menu-open');  // and closes the drawer if it was open
-  document.getElementById('planet3d-loader').classList.remove('hidden');
+  document.body.classList.add('detail-open');
+  document.body.classList.remove('menu-open');
+  document.getElementById('planet3d-loader').classList.add('hidden');
 
-  // No scene.background — alpha-clear lets the main scene show through.
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
-  camera.position.set(0, 0.6, 5.0);
-
-  // Stars
-  const stars = buildStars();
-  scene.add(stars);
-  p3.starField = stars;
-
-  // Sun sphere — emissive, no scene lighting required.
-  const geo = new THREE.SphereGeometry(1, 96, 96);
-  const loader = new THREE.TextureLoader();
-  loader.setCrossOrigin('anonymous');
-  const tex = loader.load(
-    TEX_BASE + 'sunmap.jpg',
-    () => { document.getElementById('planet3d-loader').classList.add('hidden'); },
-    undefined,
-    (err) => {
-      console.warn('Sun texture failed, falling back to flat color', err);
-      document.getElementById('planet3d-loader').classList.add('hidden');
-    }
-  );
-  tex.encoding = THREE.sRGBEncoding;
-  tex.anisotropy = p3.renderer.capabilities.getMaxAnisotropy ? p3.renderer.capabilities.getMaxAnisotropy() : 1;
-
-  const mat = new THREE.MeshBasicMaterial({ map: tex, color: 0xffffff });
-  const sunSphere = new THREE.Mesh(geo, mat);
-  sunSphere.rotation.z = 7.25 * Math.PI / 180;
-  scene.add(sunSphere);
-
-  // Layered corona: a soft outer halo + a tighter, brighter inner flare.
-  const coronaTex = makeGlowTexture(512, '#ff9d3f');
-  const innerGlowTex = makeGlowTexture(256, '#fff5d0');
-
-  const coronaMat = new THREE.SpriteMaterial({
-    map: coronaTex, color: 0xfdb813,
-    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  const corona = new THREE.Sprite(coronaMat);
-  corona.scale.set(3.6, 3.6, 1);
-  scene.add(corona);
-
-  const flareMat = new THREE.SpriteMaterial({
-    map: innerGlowTex, color: 0xfff5e0,
-    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  const flare = new THREE.Sprite(flareMat);
-  flare.scale.set(2.3, 2.3, 1);
-  scene.add(flare);
-
-  p3.disposables.push(geo, mat, tex, coronaMat, flareMat, coronaTex, innerGlowTex);
-  p3.planetMesh = sunSphere;
-  p3.coronaSprites = [corona, flare];
-
-  const controls = new THREE.OrbitControls(camera, p3.renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.06;
-  controls.rotateSpeed = 0.55;
-  controls.minDistance = 1.8;
-  controls.maxDistance = 14;
-  controls.enablePan = false;
-
-  // Solar rotation: 25 days at the equator → compressed ×1000.
-  p3.spinPerSec = (2 * Math.PI) / (25 * 24 * 3600) * 1000;
-
-  p3.scene = scene;
-  p3.camera = camera;
-  p3.controls = controls;
-
-  resize3D();
-  if (!p3.resizeHandler) {
-    p3.resizeHandler = () => resize3D();
-    window.addEventListener('resize', p3.resizeHandler);
-  }
   if (!p3.escHandler) {
     p3.escHandler = (e) => { if (e.key === 'Escape') closePlanet3D(); };
     window.addEventListener('keydown', p3.escHandler);
   }
 
-  let last = performance.now();
-  const tick = (now) => {
-    const dt = (now - last) / 1000; last = now;
-    if (p3.planetMesh) p3.planetMesh.rotation.y += p3.spinPerSec * dt;
-    if (p3.starField)  p3.starField.rotation.y += dt * 0.005;
-    if (p3.coronaSprites) {
-      const t = now * 0.001;
-      const s1 = 3.6 + Math.sin(t * 0.7) * 0.30;
-      const s2 = 2.3 + Math.sin(t * 1.1 + 1.2) * 0.18;
-      p3.coronaSprites[0].scale.set(s1, s1, 1);
-      p3.coronaSprites[1].scale.set(s2, s2, 1);
-    }
-    p3.controls.update();
-    p3.renderer.render(p3.scene, p3.camera);
-    p3.rafId = requestAnimationFrame(tick);
-  };
-  p3.rafId = requestAnimationFrame(tick);
+  // Fly to the sun (origin) using the sun sphere radius for distance scaling.
+  flyCameraToBody(sunMesh.position, 3.0);
 }
 
 function closePlanet3D() {
   const overlay = document.getElementById('planet3d');
   overlay.classList.remove('visible');
   document.body.classList.remove('detail-open');
-  // Wait for fade-out before disposing, so the user doesn't see a black flash.
-  setTimeout(() => {
-    tearDown3DScene();
-    document.getElementById('planet3d-loader').classList.add('hidden');
-  }, 350);
+  flyCameraHome();
 }
 
 document.getElementById('planet3d-close').addEventListener('click', closePlanet3D);
