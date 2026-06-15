@@ -1,0 +1,8 @@
+.claude/
+.DS_Store
+*.log
+node_modules/
+
+# Wrangler / Cloudflare build artifacts
+.wrangler/
+.dev.vars

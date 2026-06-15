@@ -1,0 +1,14 @@
+# Cloudflare Pages configuration for Solar System Comet Tracker.
+#
+# Deploys the static index.html (+ assets) plus the JPL proxy Function at
+# functions/jpl/[[path]].js. The Function runs on the Cloudflare Workers
+# runtime; same origin as the static site, so the browser sees /jpl/*
+# requests as same-origin and never hits a CORS issue.
+#
+# Deploy:        npx wrangler pages deploy .
+# Local dev:     npx wrangler pages dev .
+# CI/CD:         connect this repo via the Cloudflare Pages dashboard.
+
+name = "solar-comet-tracker"
+compatibility_date = "2026-06-15"
+pages_build_output_dir = "."

@@ -1,0 +1,2011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Solar System Comet Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #e6e6e6; overflow: hidden; }
+  #space { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #000; cursor: grab; }
+  #space:active { cursor: grabbing; }
+  #planet-labels { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+
+  /* ---- Apple-style glass tokens ---- *
+     Real glass: heavy blur, super-saturated backdrop, subtle gradient overlay
+     for "light refraction", inset top highlight (light catching the edge),
+     layered shadows for depth. */
+  .panel {
+    position: absolute;
+    background:
+      linear-gradient(135deg,
+        rgba(255,255,255,0.10) 0%,
+        rgba(255,255,255,0.02) 45%,
+        rgba(255,255,255,0.06) 100%),
+      rgba(16, 16, 22, 0.42);
+    border: 0.5px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border-radius: 18px;
+    padding: 17px 19px;
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 12px;
+    line-height: 1.5;
+    letter-spacing: -0.003em;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      inset 0 0 0 0.5px rgba(255,255,255,0.06),
+      0 1px 2px rgba(0,0,0,0.22),
+      0 12px 36px rgba(0,0,0,0.42);
+    z-index: 5;
+  }
+  .panel h1 {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    text-transform: none;
+    color: rgba(255,255,255,0.96);
+  }
+  .panel .sub { color: rgba(255,255,255,0.55); opacity: 1; font-size: 11px; letter-spacing: 0; text-transform: none; }
+  .panel .stat { margin-top: 6px; font-variant-numeric: tabular-nums; color: rgba(255,255,255,0.75); }
+  .panel .stat b { color: rgba(255,255,255,0.96); font-weight: 600; }
+
+  #info-panel { top: 16px; left: 16px; max-width: 280px; }
+  #controls-panel { top: 16px; right: 16px; width: 240px; }
+  #legend-panel { bottom: 16px; left: 16px; max-width: 280px; }
+
+  .control-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; gap: 8px; }
+  .control-row label { font-size: 12px; color: rgba(255,255,255,0.85); font-weight: 400; }
+
+  /* iOS-style switch — white knob, glass track → bright glass track when on. */
+  .toggle {
+    appearance: none; -webkit-appearance: none;
+    width: 38px; height: 23px; border-radius: 12px;
+    background: rgba(255,255,255,0.10);
+    position: relative; cursor: pointer; outline: none;
+    transition: background 0.22s ease;
+    border: 0.5px solid rgba(255,255,255,0.12);
+    flex-shrink: 0;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
+  }
+  .toggle::after {
+    content: ""; position: absolute;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: linear-gradient(180deg, #ffffff 0%, #e8e8ec 100%);
+    top: 1.5px; left: 2px;
+    transition: left 0.22s ease;
+    box-shadow:
+      0 1px 3px rgba(0,0,0,0.4),
+      0 0 0 0.5px rgba(0,0,0,0.06);
+  }
+  .toggle:checked { background: rgba(255,255,255,0.62); border-color: rgba(255,255,255,0.4); }
+  .toggle:checked::after { left: 17px; }
+
+  /* Segmented control — glass capsule with a glossy active chip. */
+  .filter-group {
+    display: flex; gap: 0; margin-top: 8px;
+    background: rgba(0,0,0,0.20);
+    border: 0.5px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    padding: 2px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.25);
+  }
+  .filter-btn {
+    flex: 1; min-width: 60px;
+    padding: 6px 8px;
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.70);
+    border-radius: 8px;
+    font-size: 11px;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: -0.003em;
+    font-weight: 500;
+    transition: background 0.15s ease, color 0.15s ease;
+    font-family: inherit;
+  }
+  .filter-btn:hover { color: rgba(255,255,255,0.95); }
+  .filter-btn.active {
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,0.24) 0%,
+        rgba(255,255,255,0.12) 100%);
+    color: #fff;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.28),
+      0 1px 2px rgba(0,0,0,0.25);
+  }
+
+  /* Zoom buttons — circular glass discs. */
+  #zoom-ctrl { position: absolute; bottom: 24px; right: 24px; z-index: 5; display: flex; flex-direction: column; gap: 8px; }
+  .zbtn {
+    width: 38px; height: 38px;
+    background:
+      linear-gradient(135deg,
+        rgba(255,255,255,0.14) 0%,
+        rgba(255,255,255,0.02) 45%,
+        rgba(255,255,255,0.08) 100%),
+      rgba(16, 16, 22, 0.42);
+    border: 0.5px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    color: rgba(255,255,255,0.94);
+    font-size: 18px; line-height: 1;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 400;
+    transition: background 0.15s ease, transform 0.1s ease;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 2px 4px rgba(0,0,0,0.25),
+      0 8px 20px rgba(0,0,0,0.35);
+  }
+  .zbtn:hover { background:
+      linear-gradient(135deg, rgba(255,255,255,0.20), rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.14)),
+      rgba(28, 28, 34, 0.5); }
+  .zbtn:active { transform: scale(0.94); }
+
+  /* Loading */
+  #loading {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background:
+      linear-gradient(135deg,
+        rgba(255,255,255,0.10) 0%,
+        rgba(255,255,255,0.02) 45%,
+        rgba(255,255,255,0.06) 100%),
+      rgba(16, 16, 22, 0.50);
+    border: 0.5px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    padding: 24px 30px; border-radius: 18px;
+    color: rgba(255,255,255,0.88); font-size: 12px; letter-spacing: 0;
+    text-transform: none; text-align: center; font-weight: 500;
+    z-index: 100;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 12px 40px rgba(0,0,0,0.55);
+  }
+  .spinner {
+    width: 24px; height: 24px;
+    border: 2px solid rgba(255,255,255,0.12);
+    border-top-color: rgba(255,255,255,0.85);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 10px auto 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+
+  /* Planet labels — DOM overlay positioned per frame by the scene */
+  .planet-label {
+    position: absolute;
+    transform: translate(-50%, 14px);
+    color: rgba(255,255,255,0.82);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 1.6px;
+    white-space: nowrap;
+    text-shadow: 0 0 6px rgba(0,0,0,0.95);
+    pointer-events: none;
+    opacity: 0.9;
+    transition: opacity 0.2s;
+  }
+
+  /* Floating tooltip — glass-styled comet popup. */
+  #tooltip {
+    position: absolute;
+    background:
+      linear-gradient(135deg,
+        rgba(255,255,255,0.10) 0%,
+        rgba(255,255,255,0.02) 45%,
+        rgba(255,255,255,0.06) 100%),
+      rgba(16, 16, 22, 0.48);
+    border: 0.5px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border-radius: 16px;
+    padding: 15px 17px;
+    color: rgba(255,255,255,0.94);
+    font-size: 12px;
+    min-width: 240px;
+    max-width: 320px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 2px 6px rgba(0,0,0,0.25),
+      0 16px 40px rgba(0,0,0,0.50);
+    z-index: 50;
+    transform: translate(16px, -50%);
+    transition: opacity 0.15s;
+    pointer-events: auto;
+  }
+  #tooltip.hidden { opacity: 0; pointer-events: none; }
+  #tooltip-close {
+    position: absolute; top: 6px; right: 8px;
+    background: none; border: none;
+    color: rgba(255,255,255,0.55); font-size: 16px; line-height: 1;
+    cursor: pointer; padding: 2px 6px;
+    font-family: inherit;
+    transition: color 0.15s;
+  }
+  #tooltip-close:hover { color: rgba(255,255,255,0.95); }
+  .popup-title { font-size: 13px; color: rgba(255,255,255,0.96); font-weight: 600; margin-bottom: 6px; letter-spacing: -0.01em; padding-right: 18px; }
+  .popup-title.planet-title { color: rgba(255,255,255,0.96); }
+  .popup-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  .popup-row span:first-child { color: rgba(255,255,255,0.55); }
+  .popup-row span:last-child { color: rgba(255,255,255,0.92); }
+  .popup-sub { font-size: 10.5px; color: rgba(255,255,255,0.7); opacity: 1; margin: -3px 0 8px; letter-spacing: 0; text-transform: none; }
+  .popup-divider { height: 0.5px; background: rgba(255,255,255,0.10); margin: 10px 0 6px; }
+  .popup-section-label { font-size: 9.5px; color: rgba(255,255,255,0.45); letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 4px; font-weight: 500; }
+  .popup-loading { font-size: 11px; color: rgba(255,255,255,0.55); font-style: italic; padding: 4px 0; }
+  .popup-loading::after { content: '·'; animation: dots 1.2s steps(4, end) infinite; margin-left: 2px; }
+  @keyframes dots { 0% { content: '·'; } 25% { content: '··'; } 50% { content: '···'; } 75% { content: '····'; } }
+  .popup-error { font-size: 11px; color: #ff8c8c; opacity: 0.8; padding: 4px 0; }
+  .popup-tag { display: inline-block; background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.92); padding: 2px 7px; border-radius: 4px; font-size: 9.5px; letter-spacing: 0; margin-right: 4px; font-weight: 500; }
+  .popup-tag.neo { background: rgba(255,140,80,0.18); color: #ffb88a; }
+  .popup-tag.pha { background: rgba(255,80,80,0.18); color: #ff9c9c; }
+
+  .credit { color: rgba(255,255,255,0.40); font-size: 10px; margin-top: 8px; letter-spacing: 0; }
+  .credit a { color: rgba(255,255,255,0.65); text-decoration: none; }
+  .credit a:hover { color: rgba(255,255,255,0.92); }
+
+  /* ---------- 3D planet overlay ---------- */
+  #planet3d {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, #050810 0%, #000 80%);
+    z-index: 200;
+    display: flex;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+  }
+  #planet3d.visible { opacity: 1; pointer-events: auto; }
+  #planet3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+  #planet3d-canvas:active { cursor: grabbing; }
+
+  #planet3d-info {
+    position: absolute;
+    top: 32px; left: 32px;
+    max-width: 360px;
+    padding: 24px 28px;
+    background:
+      linear-gradient(135deg,
+        rgba(255,255,255,0.10) 0%,
+        rgba(255,255,255,0.02) 45%,
+        rgba(255,255,255,0.06) 100%),
+      rgba(16, 16, 22, 0.42);
+    border: 0.5px solid rgba(255,255,255,0.18);
+    border-radius: 22px;
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 2px 6px rgba(0,0,0,0.25),
+      0 20px 50px rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.94);
+  }
+  #planet3d-info .eyebrow {
+    color: rgba(255,255,255,0.55);
+    font-size: 11px;
+    letter-spacing: 0;
+    text-transform: none;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  #planet3d-info h2 {
+    margin: 0 0 14px;
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+  #planet3d-info .row {
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 8px 0;
+    border-top: 0.5px solid rgba(255,255,255,0.08);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  #planet3d-info .row span:first-child { color: rgba(255,255,255,0.55); letter-spacing: 0; }
+  #planet3d-info .row span:last-child { color: rgba(255,255,255,0.92); }
+  #planet3d-info .desc { margin-top: 14px; font-size: 12.5px; line-height: 1.55; color: rgba(255,255,255,0.75); }
+
+  #planet3d-close {
+    position: absolute; top: 24px; right: 24px;
+    width: 38px; height: 38px;
+    background:
+      linear-gradient(135deg,
+        rgba(255,255,255,0.14) 0%,
+        rgba(255,255,255,0.02) 45%,
+        rgba(255,255,255,0.08) 100%),
+      rgba(16, 16, 22, 0.42);
+    border: 0.5px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border-radius: 50%;
+    color: rgba(255,255,255,0.88);
+    font-size: 18px; line-height: 1;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, transform 0.1s ease;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 2px 4px rgba(0,0,0,0.25),
+      0 8px 20px rgba(0,0,0,0.35);
+  }
+  #planet3d-close:hover { background:
+      linear-gradient(135deg, rgba(255,255,255,0.20), rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.14)),
+      rgba(28, 28, 34, 0.5);
+    color: #fff; }
+  #planet3d-close:active { transform: scale(0.94); }
+
+  #planet3d-hint {
+    position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.45); font-size: 11px; letter-spacing: 0;
+    text-transform: none;
+    pointer-events: none;
+    font-weight: 500;
+  }
+
+  #planet3d-loader {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: rgba(255,255,255,0.7); font-size: 11px; letter-spacing: 0; text-transform: none;
+    text-align: center;
+  }
+  #planet3d-loader.hidden { display: none; }
+
+  /* ---- Intro modal (page load) ---- */
+  #intro {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    opacity: 1;
+    transition: opacity 0.45s ease;
+  }
+  #intro.hidden { opacity: 0; pointer-events: none; }
+
+  #intro-card {
+    max-width: 480px;
+    width: 100%;
+    background:
+      linear-gradient(135deg,
+        rgba(255,255,255,0.10) 0%,
+        rgba(255,255,255,0.02) 45%,
+        rgba(255,255,255,0.06) 100%),
+      rgba(16, 16, 22, 0.55);
+    border: 0.5px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    border-radius: 22px;
+    padding: 36px 38px 32px;
+    color: rgba(255,255,255,0.92);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.22),
+      0 2px 6px rgba(0,0,0,0.25),
+      0 24px 64px rgba(0,0,0,0.6);
+  }
+  #intro .eyebrow {
+    color: rgba(255,255,255,0.55);
+    font-size: 11px;
+    margin-bottom: 6px;
+    letter-spacing: 0;
+    font-weight: 500;
+  }
+  #intro h1 {
+    margin: 0 0 16px;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+  #intro p {
+    margin: 0 0 12px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.78);
+  }
+  #intro p a { color: rgba(255,255,255,0.95); text-decoration: underline; text-underline-offset: 2px; }
+  #intro .footnote {
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 0.5px solid rgba(255,255,255,0.10);
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.50);
+    line-height: 1.5;
+  }
+  #intro-button {
+    margin-top: 22px;
+    padding: 11px 22px;
+    background: linear-gradient(180deg, #ffffff 0%, #ebebee 100%);
+    border: none;
+    color: rgba(0,0,0,0.92);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.6),
+      0 2px 8px rgba(0,0,0,0.3);
+    transition: transform 0.1s ease, background 0.15s ease;
+  }
+  #intro-button:hover { background: linear-gradient(180deg, #ffffff 0%, #d8d8dc 100%); }
+  #intro-button:active { transform: scale(0.97); }
+</style>
+</head>
+<body>
+<canvas id="space"></canvas>
+<div id="planet-labels"></div>
+
+<div id="tooltip" class="hidden">
+  <button id="tooltip-close" aria-label="Close">×</button>
+  <div id="tooltip-content"></div>
+</div>
+
+<div id="loading">
+  <div>Loading JPL Small-Body Database</div>
+  <div class="spinner"></div>
+</div>
+
+<div id="info-panel" class="panel">
+  <h1>Solar System Comet Tracker</h1>
+  <div class="sub">NASA JPL Small-Body Database</div>
+  <div class="stat">Comets plotted: <b id="comet-count">…</b></div>
+  <div class="stat">Planets: <b>8</b> &nbsp; Sun: <b>1</b></div>
+  <div class="credit">Data: <a href="https://ssd-api.jpl.nasa.gov/" target="_blank" rel="noopener">ssd-api.jpl.nasa.gov</a></div>
+</div>
+
+<div id="controls-panel" class="panel">
+  <h1 style="font-size: 12px;">Controls</h1>
+  <div class="sub">Orbital period filter</div>
+  <div class="filter-group" id="period-filter">
+    <button class="filter-btn active" data-period="all">All</button>
+    <button class="filter-btn" data-period="short">&lt; 20 yr</button>
+    <button class="filter-btn" data-period="halley">20–200 yr</button>
+  </div>
+  <div class="control-row">
+    <label>All comet orbits</label>
+    <input type="checkbox" class="toggle" id="toggle-orbits" checked />
+  </div>
+  <div class="control-row">
+    <label>Planet labels</label>
+    <input type="checkbox" class="toggle" id="toggle-labels" checked />
+  </div>
+  <div class="control-row">
+    <label>Planet orbital rings</label>
+    <input type="checkbox" class="toggle" id="toggle-rings" checked />
+  </div>
+</div>
+
+<div id="legend-panel" class="panel">
+  <div class="sub" style="margin-bottom: 6px;">Legend</div>
+  <div style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:10px;height:10px;border-radius:50%;background:#FDB813;box-shadow:0 0 6px #FDB813;"></span> Sun</div>
+  <div style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:8px;height:8px;border-radius:50%;background:#4a90e2;"></span> Planet</div>
+
+  <div class="sub" style="margin:10px 0 4px;">Comet activity color (by perihelion)</div>
+  <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;font-size:10.5px;color:rgba(255,255,255,0.78);font-variant-numeric:tabular-nums;">
+    <span style="width:10px;height:10px;border-radius:50%;background:#ff3a1f;box-shadow:0 0 8px #ff3a1f;align-self:center;"></span><span>&lt; 0.05 AU — Na (sungrazer)</span>
+    <span style="width:10px;height:10px;border-radius:50%;background:#ffb800;box-shadow:0 0 8px #ffb800;align-self:center;"></span><span>&lt; 0.5 AU — Na + C₂</span>
+    <span style="width:10px;height:10px;border-radius:50%;background:#32ff5a;box-shadow:0 0 8px #32ff5a;align-self:center;"></span><span>&lt; 1.5 AU — C₂ Swan bands</span>
+    <span style="width:10px;height:10px;border-radius:50%;background:#00e0ff;box-shadow:0 0 8px #00e0ff;align-self:center;"></span><span>&lt; 3 AU — CN + ion</span>
+    <span style="width:10px;height:10px;border-radius:50%;background:#3a6cff;box-shadow:0 0 8px #3a6cff;align-self:center;"></span><span>&lt; 5 AU — CO⁺ ion tail</span>
+    <span style="width:10px;height:10px;border-radius:50%;background:#e6c8ff;box-shadow:0 0 8px #e6c8ff;align-self:center;"></span><span>≥ 5 AU — dust only</span>
+  </div>
+
+  <div class="credit">Drag to orbit · Scroll to zoom · Click to inspect</div>
+</div>
+
+<div id="zoom-ctrl">
+  <button class="zbtn" id="zin">+</button>
+  <button class="zbtn" id="zout">−</button>
+</div>
+
+<div id="planet3d">
+  <canvas id="planet3d-canvas"></canvas>
+  <button id="planet3d-close" aria-label="Close">×</button>
+  <div id="planet3d-info">
+    <div class="eyebrow" id="p3-eyebrow">Planet</div>
+    <h2 id="p3-name">—</h2>
+    <div class="row"><span>Semi-major axis</span><span id="p3-a">—</span></div>
+    <div class="row"><span>Distance from Sun</span><span id="p3-dist">—</span></div>
+    <div class="row"><span>Axial tilt</span><span id="p3-tilt">—</span></div>
+    <div class="row"><span>Day length</span><span id="p3-day">—</span></div>
+    <div class="desc" id="p3-desc">—</div>
+  </div>
+  <div id="planet3d-hint">Drag to rotate · Scroll to zoom · Esc to close</div>
+  <div id="planet3d-loader"><div>Rendering</div><div class="spinner"></div></div>
+</div>
+
+<div id="intro">
+  <div id="intro-card">
+    <div class="eyebrow">Built June 2026 · v1.0</div>
+    <h1>Solar System Comet Tracker</h1>
+    <p>Plots ~1,300 short-period comets in 3D using real Keplerian orbital elements pulled live from <a href="https://ssd-api.jpl.nasa.gov/" target="_blank" rel="noopener">NASA JPL's Small-Body Database</a>. Planet-to-planet sizes are real ratios; comet positions, eccentricities, and inclinations are mathematically accurate.</p>
+    <p>Some scales are stylized so everything fits on screen. Orbital distances are scaled uniformly (true scale would put Neptune ~12,000 units away). The Sun is rendered smaller than reality — at true 109× Earth it would engulf Mercury's orbit. Moon orbital distances are non-linearly compressed to sit beside their parent planets.</p>
+    <p>Each comet's color predicts its dominant gas emission based on perihelion distance — sodium tails near the sun, C₂ Swan-band green further out, blue CO⁺ ion tails in the cold outer system.</p>
+    <div class="footnote">For informational and educational purposes only. Not for navigation, scientific calculation, or anything other than curiosity.</div>
+    <button id="intro-button">Got it</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+window.addEventListener('error', (e) => {
+  const msg = ((e.error && e.error.stack) || e.message || e.toString()).slice(0, 500);
+  const el = document.getElementById('loading');
+  if (el) {
+    el.classList.remove('hidden');
+    el.innerHTML = `<div style="color:#ff8c8c;max-width:380px;text-align:left;font-family:monospace;font-size:11px;line-height:1.4;text-transform:none;letter-spacing:0;">
+      <b style="color:#ff5c5c;">Runtime error</b><br>${msg}
+    </div>`;
+  }
+  console.error('Runtime error:', e.error || e.message);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Unhandled rejection:', e.reason);
+});
+
+/* =========================================================================
+   CONFIG — Scene units use 1 AU = SCENE_SCALE units. Ecliptic plane = XZ; Y is up.
+   Spreading the system out (>1) lets the sun stay visibly biggest without
+   engulfing the inner planets, and gives comet orbits room to breathe.
+   ========================================================================= */
+// Bumped from 8 → 12 so the sun has room to be visibly bigger than Jupiter
+// (Mercury orbit is now 0.39 × 12 = 4.68 units; sun can go up to ~4 units safely).
+// Real planet-to-planet ratios still hold via PLANET_SCENE_RADIUS below.
+const SCENE_SCALE = 12;
+
+/* =========================================================================
+   KEPLERIAN MATH
+   ========================================================================= */
+
+// Newton-Raphson solver for Kepler's equation:  M = E − e·sin(E)
+function solveKeplerEquation(M, e, tol = 1e-9, maxIter = 60) {
+  // Normalize M to [-π, π] for numerical stability
+  M = ((M + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+  let E = e < 0.8 ? M : Math.PI;
+  for (let i = 0; i < maxIter; i++) {
+    const f  = E - e * Math.sin(E) - M;
+    const fp = 1 - e * Math.cos(E);
+    const dE = f / fp;
+    E -= dE;
+    if (Math.abs(dE) < tol) return E;
+  }
+  return E;
+}
+
+// Orbital elements → scene XYZ in AU. Scene mapping: ecliptic-plane axes (X, Y) → scene (X, Z);
+// out-of-plane axis Z (inclination height) → scene Y (up).
+function keplerToScene(a, e, iDeg, omDeg, wDeg, MDeg) {
+  const D2R = Math.PI / 180;
+  const i = iDeg * D2R, om = omDeg * D2R, w = wDeg * D2R, M = MDeg * D2R;
+  const E = solveKeplerEquation(M, e);
+  const xp = a * (Math.cos(E) - e);
+  const yp = a * Math.sqrt(Math.max(0, 1 - e * e)) * Math.sin(E);
+
+  const cw = Math.cos(w),  sw = Math.sin(w);
+  const co = Math.cos(om), so = Math.sin(om);
+  const ci = Math.cos(i),  si = Math.sin(i);
+
+  const ex = (co * cw - so * sw * ci) * xp + (-co * sw - so * cw * ci) * yp;
+  const ey = (so * cw + co * sw * ci) * xp + (-so * sw + co * cw * ci) * yp;
+  const ez = (sw * si) * xp + (cw * si) * yp;
+  // ecliptic (ex, ey, ez) → scene (ex, ez, ey), then scaled into scene units.
+  return [ex * SCENE_SCALE, ez * SCENE_SCALE, ey * SCENE_SCALE];
+}
+
+/* =========================================================================
+   ORBIT SAMPLING
+   ========================================================================= */
+
+// Sample an orbit in scene coords by stepping the eccentric anomaly E uniformly.
+function sampleOrbitScene(a, e, iDeg, omDeg, wDeg, samples = 192) {
+  const D2R = Math.PI / 180;
+  const i = iDeg * D2R, om = omDeg * D2R, w = wDeg * D2R;
+  const cw = Math.cos(w),  sw = Math.sin(w);
+  const co = Math.cos(om), so = Math.sin(om);
+  const ci = Math.cos(i),  si = Math.sin(i);
+  const sqrt1me2 = Math.sqrt(Math.max(0, 1 - e * e));
+
+  const pts = new Float32Array((samples + 1) * 3);
+  for (let k = 0; k <= samples; k++) {
+    const E = (k / samples) * 2 * Math.PI;
+    const xp = a * (Math.cos(E) - e);
+    const yp = a * sqrt1me2 * Math.sin(E);
+    const ex = (co * cw - so * sw * ci) * xp + (-co * sw - so * cw * ci) * yp;
+    const ey = (so * cw + co * sw * ci) * xp + (-so * sw + co * cw * ci) * yp;
+    const ez = (sw * si) * xp + (cw * si) * yp;
+    pts[k * 3 + 0] = ex * SCENE_SCALE;
+    pts[k * 3 + 1] = ez * SCENE_SCALE;  // scene Y = ecliptic Z (out-of-plane)
+    pts[k * 3 + 2] = ey * SCENE_SCALE;  // scene Z = ecliptic Y
+  }
+  return pts;
+}
+
+/* =========================================================================
+   PLANETS
+   ========================================================================= */
+
+const PLANETS = [
+  { name: 'Mercury', a: 0.39,  size: 10, color: '#9c9c9c', angle:  20, fact: 'Smallest planet. Surface temps swing from -180 °C to 430 °C. Orbital period: 88 days.' },
+  { name: 'Venus',   a: 0.72,  size: 12, color: '#e8c87a', angle:  75, fact: 'Hottest planet (462 °C). Thick CO₂ atmosphere with sulfuric acid clouds. Orbital period: 225 days.' },
+  { name: 'Earth',   a: 1.00,  size: 13, color: '#4a90e2', angle: 130, fact: 'Only known world with surface liquid water. One moon. Orbital period: 365.25 days.' },
+  { name: 'Mars',    a: 1.52,  size: 11, color: '#c1442e', angle: 200, fact: 'Home to Olympus Mons, the tallest known volcano. Two small moons. Orbital period: 687 days.' },
+  { name: 'Jupiter', a: 5.20,  size: 24, color: '#d4a373', angle: 260, fact: 'Largest planet, mostly hydrogen and helium. 95 known moons. Orbital period: 11.86 yr.' },
+  { name: 'Saturn',  a: 9.58,  size: 21, color: '#e8d090', angle: 310, fact: 'Famous for its ring system. 146 known moons. Orbital period: 29.46 yr.' },
+  { name: 'Uranus',  a: 19.20, size: 16, color: '#7fdbe0', angle:  45, fact: 'Ice giant rotating on its side (97.8° tilt). Orbital period: 84 yr.' },
+  { name: 'Neptune', a: 30.05, size: 16, color: '#3f5fbf', angle: 150, fact: 'Windiest planet; supersonic atmospheric jets. Orbital period: 164.8 yr.' },
+];
+
+/* =========================================================================
+   STATE
+   ========================================================================= */
+
+let canvas, renderer, scene, camera, controls;
+let raycaster, pointerNDC;
+let starField, sunMesh, sunGlow, sunHitMesh;
+let planetMeshes = [];           // each: { mesh, hitMesh, planet, labelEl, sphereR }
+let planetRingMeshes = [];
+let moons = [];                  // each: { pivot, mesh, def, angularSpeed }
+let cometPoints;                 // THREE.Points for all visible comets
+let allCometOrbitsMesh = null;   // LineSegments built when the toggle is on
+let selectedOrbitLine, selectedSprite;
+let comets = [];                 // {name, a, e, i, om, w, ma, q, per_y, sx, sy, sz}
+let visibleCometIndices = [];
+let currentFilter = 'all';
+
+/* =========================================================================
+   SCENE INIT
+   ========================================================================= */
+
+function initSpace() {
+  canvas = document.getElementById('space');
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000004);
+
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 12000);
+  // Default view: inner system + Jupiter framed; Neptune at 360 units needs a zoom-out.
+  camera.position.set(0, 120, 200);
+
+  controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.minDistance = 12;
+  controls.maxDistance = 3500;
+  controls.enablePan = false;
+  controls.target.set(0, 0, 0);
+
+  raycaster = new THREE.Raycaster();
+  pointerNDC = new THREE.Vector2();
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+  const sunLight = new THREE.PointLight(0xffeec0, 2.2, 0, 0);
+  scene.add(sunLight);
+
+  buildStarField();
+  buildSun();
+  buildPlanetsAndRings();
+  buildMoons();
+  initCometSystem();
+
+  window.addEventListener('resize', onResize);
+  wirePointerInput();
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') clearSelection(); });
+
+  wireUI();
+  animate();
+  loadComets();
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+/* =========================================================================
+   STARS, SUN, PLANETS, RINGS
+   ========================================================================= */
+
+// Small radial-gradient texture for additive-blended sprite glows.
+function makeGlowTexture(size, hexColor) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  g.addColorStop(0.0, hexColor);
+  g.addColorStop(0.25, hexColor);
+  g.addColorStop(1.0, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+function buildStarField() {
+  const N = 4000;
+  const positions = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    // Sit well outside Neptune's orbit (~360 units) so stars feel like a deep backdrop.
+    const r = 2400 + Math.random() * 2400;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    positions[i*3+0] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i*3+2] = r * Math.cos(phi);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.7,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.85,
+  });
+  starField = new THREE.Points(geo, mat);
+  scene.add(starField);
+}
+
+// Shared texture loader so every planet/sun can pull from the same CORS-friendly mirror.
+const sceneTexLoader = new THREE.TextureLoader().setCrossOrigin('anonymous');
+function loadSceneTex(url) {
+  const t = sceneTexLoader.load(url);
+  t.encoding = THREE.sRGBEncoding;
+  t.anisotropy = 4;
+  return t;
+}
+
+// Real sidereal rotation in hours → scene radians/sec, compressed so it reads at a glance.
+const SCENE_SPIN_COMPRESS = 3000;
+function sceneSpinRate(spinHrs) {
+  if (!isFinite(spinHrs) || spinHrs === 0) return 0;
+  return (2 * Math.PI) / (spinHrs * 3600) * SCENE_SPIN_COMPRESS;
+}
+
+function buildSun() {
+  // Sun stays the biggest body (just bigger than Jupiter at 2.74) without crowding Mercury's
+  // orbit at 4.68. New gap from sun's surface to Mercury: 1.68 units — about 56% of sun's
+  // radius, so Mercury reads as clearly separate while still feeling close. The visible corona
+  // extends past the sphere via the glow sprite, fading into the inky space around Mercury.
+  const sunR = 3.0;
+  const geo = new THREE.SphereGeometry(sunR, 64, 64);
+  // Real solar surface texture; emissive so it ignores scene lighting.
+  const sunTex = loadSceneTex(TEX_BASE + 'sunmap.jpg');
+  const mat = new THREE.MeshBasicMaterial({ map: sunTex, color: 0xffffff });
+  sunMesh = new THREE.Mesh(geo, mat);
+  sunMesh.userData = { kind: 'sun' };
+  // Solar axial tilt relative to the ecliptic.
+  sunMesh.rotation.z = 7.25 * Math.PI / 180;
+  scene.add(sunMesh);
+
+  const glowMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture(256, '#fdb813'),
+    color: 0xfdb813,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  sunGlow = new THREE.Sprite(glowMat);
+  // Halo radius ≈ 3.6 — extends past the sphere (3.0) into space, fades well before Mercury (4.68).
+  sunGlow.scale.set(7.2, 7.2, 1);
+  scene.add(sunGlow);
+
+  const hitGeo = new THREE.SphereGeometry(3.5, 16, 16);
+  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+  sunHitMesh = new THREE.Mesh(hitGeo, hitMat);
+  sunHitMesh.userData = { kind: 'sun' };
+  scene.add(sunHitMesh);
+}
+
+// Exaggerated for visibility but small enough that inner planets sit on (not inside) their orbits.
+// Mercury at 0.39 AU is barely larger than the sun's 0.18 AU radius, so its sphere has to be tiny.
+const PLANET_REAL_RADIUS_KM = {
+  Mercury: 2440,  Venus: 6052,   Earth: 6378,   Mars: 3396,
+  Jupiter: 71492, Saturn: 60268, Uranus: 25559, Neptune: 24764,
+};
+
+// Major moons — the 22 most prominent / rounded bodies. Real radii (rKm) and orbital
+// distances (orbitKm) are accurate; orbital distance is visualized non-linearly so all moons
+// fit just outside their parent without overlapping the rings.
+const MOONS = [
+  // Earth
+  { name: 'Moon',      parent: 'Earth',   rKm: 1737, orbitKm:  384400, periodDays:  27.32, color: 0xcdcdc8 },
+  // Mars
+  { name: 'Phobos',    parent: 'Mars',    rKm:   11, orbitKm:    9376, periodDays:   0.319, color: 0x9c8a78 },
+  { name: 'Deimos',    parent: 'Mars',    rKm:    6, orbitKm:   23463, periodDays:   1.262, color: 0x9c8a78 },
+  // Jupiter — the four Galilean moons
+  { name: 'Io',        parent: 'Jupiter', rKm: 1822, orbitKm:  421800, periodDays:   1.769, color: 0xffeb80 },
+  { name: 'Europa',    parent: 'Jupiter', rKm: 1561, orbitKm:  671100, periodDays:   3.551, color: 0xd9c8a8 },
+  { name: 'Ganymede',  parent: 'Jupiter', rKm: 2634, orbitKm: 1070400, periodDays:   7.155, color: 0xa89888 },
+  { name: 'Callisto',  parent: 'Jupiter', rKm: 2410, orbitKm: 1882700, periodDays:  16.69,  color: 0x705a48 },
+  // Saturn — the seven rounded moons + Phoebe-class Iapetus
+  { name: 'Mimas',     parent: 'Saturn',  rKm:  198, orbitKm:  185539, periodDays:   0.942, color: 0xcccccc },
+  { name: 'Enceladus', parent: 'Saturn',  rKm:  252, orbitKm:  238042, periodDays:   1.370, color: 0xefefef },
+  { name: 'Tethys',    parent: 'Saturn',  rKm:  533, orbitKm:  294672, periodDays:   1.888, color: 0xd0d0d0 },
+  { name: 'Dione',     parent: 'Saturn',  rKm:  561, orbitKm:  377396, periodDays:   2.737, color: 0xc8c8c0 },
+  { name: 'Rhea',      parent: 'Saturn',  rKm:  764, orbitKm:  527108, periodDays:   4.518, color: 0xc8c0b8 },
+  { name: 'Titan',     parent: 'Saturn',  rKm: 2575, orbitKm: 1221870, periodDays:  15.95,  color: 0xe8b060 },
+  { name: 'Iapetus',   parent: 'Saturn',  rKm:  734, orbitKm: 3560820, periodDays:  79.32,  color: 0x988878 },
+  // Uranus — five rounded moons
+  { name: 'Miranda',   parent: 'Uranus',  rKm:  236, orbitKm:  129900, periodDays:   1.413, color: 0xa8a8a0 },
+  { name: 'Ariel',     parent: 'Uranus',  rKm:  579, orbitKm:  190900, periodDays:   2.520, color: 0xa0a098 },
+  { name: 'Umbriel',   parent: 'Uranus',  rKm:  584, orbitKm:  266000, periodDays:   4.144, color: 0x707068 },
+  { name: 'Titania',   parent: 'Uranus',  rKm:  789, orbitKm:  436300, periodDays:   8.706, color: 0x807870 },
+  { name: 'Oberon',    parent: 'Uranus',  rKm:  761, orbitKm:  583500, periodDays:  13.46,  color: 0x706860 },
+  // Neptune
+  { name: 'Triton',    parent: 'Neptune', rKm: 1353, orbitKm:  354800, periodDays:   5.877, color: 0xc8b8a8 },
+  { name: 'Proteus',   parent: 'Neptune', rKm:  210, orbitKm:  117647, periodDays:   1.122, color: 0x707070 },
+  { name: 'Nereid',    parent: 'Neptune', rKm:  170, orbitKm: 5513400, periodDays: 360.13,  color: 0xa0a0a0 },
+];
+
+// True relative radii vs. Earth (real km / Earth's 6,371 km), scaled by EARTH_R for visibility.
+// Mercury 0.383, Venus 0.949, Earth 1.000, Mars 0.532, Jupiter 10.97, Saturn 9.14, Uranus 3.98, Neptune 3.86.
+const EARTH_SCENE_R = 0.25;
+const PLANET_SCENE_RADIUS = {
+  Mercury: 0.383 * EARTH_SCENE_R,   // 0.096
+  Venus:   0.949 * EARTH_SCENE_R,   // 0.237
+  Earth:   1.000 * EARTH_SCENE_R,   // 0.250
+  Mars:    0.532 * EARTH_SCENE_R,   // 0.133
+  Jupiter: 10.97 * EARTH_SCENE_R,   // 2.74
+  Saturn:  9.140 * EARTH_SCENE_R,   // 2.29
+  Uranus:  3.980 * EARTH_SCENE_R,   // 0.99
+  Neptune: 3.860 * EARTH_SCENE_R,   // 0.97
+};
+
+// Distinct saturated ring tints — bright enough to read against pure black.
+const PLANET_RING_COLOR = {
+  Mercury: 0xb0b0b0,  // pale grey
+  Venus:   0xffd27a,  // warm gold
+  Earth:   0x4dbcff,  // bright sky blue
+  Mars:    0xff6a4d,  // mars red
+  Jupiter: 0xffb070,  // banded orange
+  Saturn:  0xf3d77f,  // pale gold
+  Uranus:  0x7defe6,  // ice cyan
+  Neptune: 0x6a8cff,  // deep blue
+};
+
+function buildPlanetsAndRings() {
+  const labelsContainer = document.getElementById('planet-labels');
+  for (const p of PLANETS) {
+    const orbitR = p.a * SCENE_SCALE;
+    // Thin hairline rings — slightly thicker scaling to stay visible across the bigger scene.
+    const tube = 0.03 + Math.log10(1 + p.a) * 0.015;
+    const ringGeo = new THREE.TorusGeometry(orbitR, tube, 6, Math.max(160, Math.ceil(orbitR * 8)));
+    // Each ring takes its planet's own color so you can ID an orbit at a glance.
+    const ringColor = (PLANET_RING_COLOR[p.name] !== undefined) ? PLANET_RING_COLOR[p.name] : p.color;
+    const ringMat = new THREE.MeshBasicMaterial({ color: ringColor, transparent: true, opacity: 0.9 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;  // lay flat in XZ plane
+    scene.add(ring);
+    planetRingMeshes.push(ring);
+
+    // Visible sphere — real surface texture, slight self-emissive so the night side stays readable.
+    const sphereR = PLANET_SCENE_RADIUS[p.name] || 0.3;
+    const sphereGeo = new THREE.SphereGeometry(sphereR, 48, 48);
+    const info = PLANET_3D[p.name];
+    const sphereMat = new THREE.MeshStandardMaterial({
+      map: info ? loadSceneTex(info.tex) : null,
+      color: 0xffffff,
+      roughness: 0.85,
+      metalness: 0.05,
+      emissive: 0xffffff,
+      emissiveMap: info ? loadSceneTex(info.tex) : null,
+      emissiveIntensity: 0.18,
+    });
+    const mesh = new THREE.Mesh(sphereGeo, sphereMat);
+    const ang = p.angle * Math.PI / 180;
+    mesh.position.set(orbitR * Math.cos(ang), 0, orbitR * Math.sin(ang));
+    // Apply the planet's real axial tilt around the Z axis so the rotation looks correct.
+    if (info) mesh.rotation.z = info.tilt * Math.PI / 180;
+    mesh.userData = { kind: 'planet', planet: p, spinPerSec: info ? sceneSpinRate(info.spinHrs) : 0 };
+    scene.add(mesh);
+
+    // Saturn rings, in-scene. Parented to the planet so they inherit position + tilt.
+    if (info && info.ring) {
+      const innerR = sphereR * 1.35;
+      const outerR = sphereR * 2.30;
+      const ringGeoS = new THREE.RingGeometry(innerR, outerR, 96, 1);
+      // Remap UVs so the radial direction samples across the 1-D ring strip.
+      const posAttr = ringGeoS.attributes.position;
+      const uvAttr  = ringGeoS.attributes.uv;
+      const v3 = new THREE.Vector3();
+      for (let i = 0; i < posAttr.count; i++) {
+        v3.fromBufferAttribute(posAttr, i);
+        const r = v3.length();
+        const t = (r - innerR) / (outerR - innerR);
+        uvAttr.setXY(i, t, 0.5);
+      }
+      const ringTex = loadSceneTex(info.ring);
+      const ringMatS = new THREE.MeshBasicMaterial({
+        map: ringTex,
+        alphaMap: ringTex,
+        transparent: true,
+        side: THREE.DoubleSide,
+        opacity: 0.95,
+        depthWrite: false,
+      });
+      const ringMesh = new THREE.Mesh(ringGeoS, ringMatS);
+      ringMesh.rotation.x = Math.PI / 2;  // lie flat in planet's local equator
+      mesh.add(ringMesh);
+    }
+
+    // Hit sphere — generous around tiny inner planets, capped for the giants so the click zone
+    // stays close to the visible disc.
+    const hitR = Math.min(sphereR + 0.35, sphereR * 1.6 + 0.2);
+    const hitGeo = new THREE.SphereGeometry(hitR, 12, 12);
+    const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+    const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+    hitMesh.position.copy(mesh.position);
+    hitMesh.userData = { kind: 'planet', planet: p };
+    scene.add(hitMesh);
+
+    // DOM label, positioned per-frame via screen projection.
+    const lbl = document.createElement('div');
+    lbl.className = 'planet-label';
+    lbl.textContent = p.name;
+    labelsContainer.appendChild(lbl);
+
+    planetMeshes.push({ mesh, hitMesh, planet: p, labelEl: lbl, sphereR });
+  }
+}
+
+function buildMoons() {
+  for (const m of MOONS) {
+    const parent = planetMeshes.find(pm => pm.planet.name === m.parent);
+    if (!parent) continue;
+
+    const planetSphereR = PLANET_SCENE_RADIUS[m.parent];
+    const planetRealR   = PLANET_REAL_RADIUS_KM[m.parent];
+
+    // Real radius scaled by the same Earth-based factor as the planets. Tiny moons (Phobos,
+    // Deimos) clamp to a 0.04 minimum so they don't disappear to sub-pixel.
+    const moonR = Math.max(0.04, m.rKm * (EARTH_SCENE_R / 6378));
+
+    // Real orbital distance in parent-radii, then visualized non-linearly so inner moons
+    // sit just above the parent and outer ones don't drift into other planets' orbits.
+    const realOrbitInPR = m.orbitKm / planetRealR;
+    const orbitR = planetSphereR * (1.5 + Math.sqrt(realOrbitInPR) * 0.55);
+
+    // Pivot at the planet's position, tilted by the planet's axial tilt so the moon orbits
+    // the parent's equator (not the ecliptic). Spin the pivot to orbit the moon.
+    const parentTilt = (PLANET_3D[m.parent] || {}).tilt || 0;
+    const pivot = new THREE.Group();
+    pivot.position.copy(parent.mesh.position);
+    pivot.rotation.z = parentTilt * Math.PI / 180;
+    pivot.rotation.y = Math.random() * Math.PI * 2;
+    scene.add(pivot);
+
+    const geo = new THREE.SphereGeometry(moonR, 16, 16);
+    const mat = new THREE.MeshStandardMaterial({
+      color: m.color,
+      roughness: 0.95,
+      metalness: 0.0,
+      emissive: m.color,
+      emissiveIntensity: 0.12,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.x = orbitR;
+    pivot.add(mesh);
+
+    // Angular speed using the same time-compression as planet spin (×3000), so a moon's
+    // orbital period relative to its planet's rotation stays correct.
+    const orbitsPerSec = SCENE_SPIN_COMPRESS / (m.periodDays * 86400);
+    const angularSpeed = orbitsPerSec * 2 * Math.PI;
+
+    moons.push({ pivot, mesh, def: m, angularSpeed });
+  }
+  console.log(`Built ${moons.length} moons across ${new Set(MOONS.map(m => m.parent)).size} planets.`);
+}
+
+/* =========================================================================
+   COMETS
+   ========================================================================= */
+
+// JPL's API has no CORS headers, so we route through the Cloudflare Pages Function
+// at /jpl/* (functions/jpl/[[path]].js). Same-origin in production, no CORS issue.
+// If the page is opened directly via file:// we fall back to the raw URL (which will
+// fail under modern browser CORS rules — see the loadComets hint).
+function jplUrl(pathAndQuery) {
+  if (location.protocol === 'file:') {
+    return 'https://ssd-api.jpl.nasa.gov/' + pathAndQuery;
+  }
+  return '/jpl/' + pathAndQuery;
+}
+
+async function fetchWithRetry(url, attempts = 3, label = 'JPL') {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${label} returned ${res.status}`);
+      return res;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`${label} fetch attempt ${i + 1}/${attempts} failed: ${e.message}`);
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, 1200 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+async function fetchComets() {
+  // SBDB Query API — request only the fields we need for orbit + display.
+  const fields = ['full_name', 'e', 'a', 'i', 'om', 'w', 'ma', 'per_y', 'q'];
+  const url = jplUrl(`sbdb_query.api?fields=${fields.join(',')}&sb-kind=c&full-prec=0&limit=5000`);
+  const res = await fetchWithRetry(url, 3, 'JPL bulk');
+  const json = await res.json();
+  console.log('JPL SBDB raw response:', json);
+
+  if (!json.fields || !json.data) throw new Error('Unexpected JPL response shape');
+
+  const idx = Object.fromEntries(json.fields.map((f, i) => [f, i]));
+  const rows = json.data;
+  const parsed = [];
+  let skipped = 0;
+
+  for (const row of rows) {
+    const name  = row[idx.full_name];
+    const e     = parseFloat(row[idx.e]);
+    const a     = parseFloat(row[idx.a]);
+    const i     = parseFloat(row[idx.i]);
+    const om    = parseFloat(row[idx.om]);
+    const w     = parseFloat(row[idx.w]);
+    const ma    = parseFloat(row[idx.ma]);
+    const per_y = parseFloat(row[idx.per_y]);
+    const q     = parseFloat(row[idx.q]);
+
+    if (!isFinite(e) || !isFinite(a) || !isFinite(i) || !isFinite(om) || !isFinite(w) || !isFinite(ma)) {
+      skipped++;
+      continue;
+    }
+    // Skip hyperbolic/parabolic — no closed orbit to draw.
+    if (e >= 1 || a <= 0 || a > 200) {
+      skipped++;
+      continue;
+    }
+
+    const [sx, sy, sz] = keplerToScene(a, e, i, om, w, ma);
+    if (!isFinite(sx) || !isFinite(sy) || !isFinite(sz)) { skipped++; continue; }
+
+    parsed.push({
+      name: (name || 'Unknown comet').trim(),
+      a, e, i, om, w, ma, per_y, q,
+      sx, sy, sz,
+    });
+  }
+
+  console.log(`Parsed ${parsed.length} comets; skipped ${skipped} (missing elements / non-elliptical / outliers).`);
+  return parsed;
+}
+
+function passesFilter(c) {
+  if (currentFilter === 'all')    return true;
+  if (currentFilter === 'short')  return isFinite(c.per_y) && c.per_y < 20;
+  if (currentFilter === 'halley') return isFinite(c.per_y) && c.per_y >= 20 && c.per_y <= 200;
+  return true;
+}
+
+/* ---------- Activity-color model ----------
+   Comet bodies are mostly water ice + silicate dust + frozen volatiles. The colors
+   we *see* in the sky come from gas emissions when the comet is heated by the sun,
+   and which species dominates depends almost entirely on perihelion distance q.
+
+     q < 0.05 AU  → sungrazer; sodium (Na) tail dominates → warm orange
+     q < 0.5      → strong Na + diatomic carbon C₂          → yellow-green
+     q < 1.5      → C₂ coma "Swan bands"                   → green
+     q < 3.0      → cyanogen CN + C₂ ion tail               → cyan-green
+     q < 5.0      → CO⁺ ion tail (cold)                     → cyan
+     q ≥ 5.0      → mostly dust reflection, no coma         → pale blue-white
+
+   Returns a {label, emissions, rgbHex, rgbFloat} bundle. */
+// Hues stepped right across the spectrum so the bands are visually distinct:
+// red → orange → green → cyan → blue → magenta-white.
+const COMET_BANDS = [
+  { qMax: 0.05, label: 'Sodium (Na) tail',          emissions: 'Sungrazer — sodium evaporation dominant',                    rgbHex: 0xff3a1f, rgbFloat: [1.00, 0.23, 0.12] },
+  { qMax: 0.5,  label: 'Sodium + C₂ Swan bands',    emissions: 'Strong Na yellow + diatomic carbon (C₂) green',              rgbHex: 0xffb800, rgbFloat: [1.00, 0.72, 0.00] },
+  { qMax: 1.5,  label: 'C₂ Swan bands',             emissions: 'Diatomic carbon (C₂) coma, "comet green"',                   rgbHex: 0x32ff5a, rgbFloat: [0.20, 1.00, 0.35] },
+  { qMax: 3.0,  label: 'CN + C₂ + ion tail',        emissions: 'Cyanogen (CN) + carbon (C₂), early CO⁺ ion tail',            rgbHex: 0x00e0ff, rgbFloat: [0.00, 0.88, 1.00] },
+  { qMax: 5.0,  label: 'CO⁺ ion tail',              emissions: 'Cold — CO⁺ ionized carbon monoxide dominates',                rgbHex: 0x3a6cff, rgbFloat: [0.23, 0.42, 1.00] },
+  { qMax: Infinity, label: 'Dust reflection',       emissions: 'Too cold for coma; sunlight scatters off dust',              rgbHex: 0xe6c8ff, rgbFloat: [0.90, 0.78, 1.00] },
+];
+
+function cometBand(c) {
+  const q = isFinite(c.q) ? c.q : (c.a * (1 - c.e));
+  for (const b of COMET_BANDS) if (q < b.qMax) return b;
+  return COMET_BANDS[COMET_BANDS.length - 1];
+}
+
+function initCometSystem() {
+  // Empty THREE.Points; populated by refreshComets() once JPL data arrives.
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+  // White glow sprite + vertexColors so each comet can carry its own activity color.
+  const mat = new THREE.PointsMaterial({
+    map: makeGlowTexture(64, '#ffffff'),
+    color: 0xffffff,
+    vertexColors: true,
+    size: 1.4,
+    sizeAttenuation: true,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    alphaTest: 0.02,
+  });
+  cometPoints = new THREE.Points(geo, mat);
+  scene.add(cometPoints);
+
+  // Bright orbital ellipse for the currently selected comet.
+  const orbitGeo = new THREE.BufferGeometry();
+  orbitGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+  selectedOrbitLine = new THREE.LineLoop(orbitGeo, new THREE.LineBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.95,
+  }));
+  selectedOrbitLine.visible = false;
+  scene.add(selectedOrbitLine);
+
+  // Glowing sprite marking the selected comet's current position.
+  selectedSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture(128, '#ffffff'),
+    color: 0xffffff,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }));
+  selectedSprite.scale.set(1.8, 1.8, 1);
+  selectedSprite.visible = false;
+  scene.add(selectedSprite);
+}
+
+// Build / rebuild the "all comet orbits" merged LineSegments based on visible indices.
+function buildAllOrbitsMesh() {
+  if (allCometOrbitsMesh) {
+    scene.remove(allCometOrbitsMesh);
+    allCometOrbitsMesh.geometry.dispose();
+    allCometOrbitsMesh.material.dispose();
+    allCometOrbitsMesh = null;
+  }
+  const samples = 48;
+  const positions = [];
+  for (const idx of visibleCometIndices) {
+    const c = comets[idx];
+    if (c.a * (1 + c.e) > 100) continue;  // skip extreme-aphelion outliers
+    const pts = sampleOrbitScene(c.a, c.e, c.i, c.om, c.w, samples);
+    for (let k = 0; k < samples; k++) {
+      positions.push(pts[k*3+0], pts[k*3+1], pts[k*3+2],
+                     pts[(k+1)*3+0], pts[(k+1)*3+1], pts[(k+1)*3+2]);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  allCometOrbitsMesh = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+    color: 0x00ffff,
+    transparent: true,
+    opacity: 0.18,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }));
+  scene.add(allCometOrbitsMesh);
+}
+
+/* ---------- Selected-comet highlight + tooltip ---------- */
+
+let selectedCometIdx = null;
+
+function selectComet(idx) {
+  const c = comets[idx];
+  if (!c) return;
+  selectedCometIdx = idx;
+
+  // Build a fresh orbit ellipse for this comet.
+  const positions = sampleOrbitScene(c.a, c.e, c.i, c.om, c.w, 256);
+  selectedOrbitLine.geometry.dispose();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  selectedOrbitLine.geometry = geo;
+  // Tint the orbit + sprite by the comet's predicted activity color.
+  const band = cometBand(c);
+  selectedOrbitLine.material.color.setHex(band.rgbHex);
+  selectedSprite.material.color.setHex(band.rgbHex);
+  selectedOrbitLine.visible = true;
+
+  selectedSprite.position.set(c.sx, c.sy, c.sz);
+  selectedSprite.visible = true;
+
+  showTooltip(c, null);
+
+  fetchCometDetails(c.name)
+    .then(details => { if (selectedCometIdx === idx) showTooltip(c, details); })
+    .catch(err => {
+      console.warn(`sbdb.api lookup failed for "${c.name}":`, err);
+      if (selectedCometIdx === idx) showTooltip(c, { _error: true });
+    });
+}
+
+function clearSelection() {
+  selectedCometIdx = null;
+  if (selectedOrbitLine) selectedOrbitLine.visible = false;
+  if (selectedSprite) selectedSprite.visible = false;
+  hideTooltip();
+}
+
+function showTooltip(c, details) {
+  document.getElementById('tooltip-content').innerHTML = buildCometPopupHTML(c, details);
+  document.getElementById('tooltip').classList.remove('hidden');
+  updateTooltipPosition();
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').classList.add('hidden');
+}
+
+const _tooltipVec = new THREE.Vector3();
+function updateTooltipPosition() {
+  if (selectedCometIdx === null) return;
+  const c = comets[selectedCometIdx];
+  _tooltipVec.set(c.sx, c.sy, c.sz).project(camera);
+  const t = document.getElementById('tooltip');
+  // Behind the camera or off the clip volume → hide.
+  if (_tooltipVec.z > 1 || _tooltipVec.z < -1) { t.style.visibility = 'hidden'; return; }
+  t.style.visibility = 'visible';
+  const sx = (_tooltipVec.x * 0.5 + 0.5) * canvas.clientWidth;
+  const sy = (-_tooltipVec.y * 0.5 + 0.5) * canvas.clientHeight;
+  t.style.left = sx + 'px';
+  t.style.top  = sy + 'px';
+}
+
+/* ---------- SBDB single-object enrichment ---------- */
+
+const cometDetailsCache = {};
+const cometDetailsInflight = {};
+
+function cometDesignation(fullName) {
+  // "    1P/Halley"        → "1P"
+  // "C/2020 F3 (NEOWISE)"  → "C/2020 F3"
+  // "P/2010 A2 (LINEAR)"   → "P/2010 A2"
+  let s = String(fullName || '').trim();
+  const paren = s.indexOf('(');
+  if (paren !== -1) s = s.slice(0, paren).trim();
+  // Numbered periodic comets — "1P/Halley" should query as just "1P".
+  if (/^\d+[PD]\//.test(s)) s = s.split('/')[0];
+  return s;
+}
+
+async function fetchCometDetails(name) {
+  if (cometDetailsCache[name]) return cometDetailsCache[name];
+  if (cometDetailsInflight[name]) return cometDetailsInflight[name];
+
+  const sstr = cometDesignation(name);
+  const url = jplUrl(`sbdb.api?sstr=${encodeURIComponent(sstr)}&full-prec=false`);
+  const promise = fetch(url)
+    .then(res => {
+      if (!res.ok) throw new Error(`sbdb.api ${res.status}`);
+      return res.json();
+    })
+    .then(json => { cometDetailsCache[name] = json; return json; })
+    .finally(() => { delete cometDetailsInflight[name]; });
+
+  cometDetailsInflight[name] = promise;
+  return promise;
+}
+
+function buildCometPopupHTML(c, details) {
+  const fmt = (v, d = 3) => (isFinite(v) ? v.toFixed(d) : '—');
+  const per = isFinite(c.per_y)
+    ? (c.per_y < 1 ? `${(c.per_y * 365.25).toFixed(1)} days` : `${c.per_y.toFixed(2)} yr`)
+    : '—';
+
+  let subtitle = '';
+  let extras = '<div class="popup-loading">Loading details from JPL SBDB</div>';
+
+  if (details && details._error) {
+    extras = '<div class="popup-error">Couldn\'t load extended details.</div>';
+  } else if (details && details.object) {
+    const obj = details.object || {};
+    const orb = details.orbit || {};
+    const tags = [];
+    if (obj.orbit_class && obj.orbit_class.name) tags.push(`<span class="popup-tag">${escapeHtml(obj.orbit_class.name)}</span>`);
+    if (obj.neo) tags.push(`<span class="popup-tag neo">NEO</span>`);
+    if (obj.pha) tags.push(`<span class="popup-tag pha">PHA</span>`);
+    if (tags.length) subtitle = `<div class="popup-sub" style="margin-top:-2px;">${tags.join('')}</div>`;
+
+    const rows = [];
+    if (obj.des) rows.push(`<div class="popup-row"><span>Designation</span><span>${escapeHtml(obj.des)}</span></div>`);
+    if (orb.first_obs && orb.last_obs) rows.push(`<div class="popup-row"><span>Observed</span><span>${orb.first_obs} → ${orb.last_obs}</span></div>`);
+    if (orb.data_arc) rows.push(`<div class="popup-row"><span>Data arc</span><span>${Number(orb.data_arc).toLocaleString()} days</span></div>`);
+    if (orb.n_obs_used) rows.push(`<div class="popup-row"><span>Observations</span><span>${Number(orb.n_obs_used).toLocaleString()}</span></div>`);
+    if (orb.moid) rows.push(`<div class="popup-row"><span>Earth MOID</span><span>${parseFloat(orb.moid).toFixed(3)} AU</span></div>`);
+    if (orb.moid_jup) rows.push(`<div class="popup-row"><span>Jupiter MOID</span><span>${parseFloat(orb.moid_jup).toFixed(3)} AU</span></div>`);
+    if (orb.t_jup) rows.push(`<div class="popup-row"><span>Tisserand (Jup)</span><span>${parseFloat(orb.t_jup).toFixed(2)}</span></div>`);
+
+    extras = rows.length
+      ? `<div class="popup-section-label">JPL Small-Body Database</div>${rows.join('')}`
+      : '<div class="popup-error" style="color:#8aa;">No extended fields available.</div>';
+  }
+
+  const band = cometBand(c);
+  const swatch = '#' + band.rgbHex.toString(16).padStart(6, '0');
+  const activityHTML = `
+    <div class="popup-row" style="align-items:flex-start;">
+      <span>Activity color</span>
+      <span style="text-align:right;">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${swatch};box-shadow:0 0 6px ${swatch};vertical-align:middle;margin-right:5px;"></span>${escapeHtml(band.label)}
+      </span>
+    </div>
+    <div style="font-size:10.5px;color:rgba(255,255,255,0.55);line-height:1.45;margin:-1px 0 4px;">${escapeHtml(band.emissions)}</div>
+  `;
+
+  return `
+    <div class="popup-title">${escapeHtml(c.name.trim())}</div>
+    ${subtitle}
+    <div class="popup-row"><span>Orbital period</span><span>${per}</span></div>
+    <div class="popup-row"><span>Semi-major axis</span><span>${fmt(c.a)} AU</span></div>
+    <div class="popup-row"><span>Eccentricity</span><span>${fmt(c.e, 4)}</span></div>
+    <div class="popup-row"><span>Perihelion (q)</span><span>${fmt(c.q)} AU</span></div>
+    <div class="popup-row"><span>Inclination</span><span>${fmt(c.i, 2)}°</span></div>
+    ${activityHTML}
+    <div class="popup-divider"></div>
+    ${extras}
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function refreshComets() {
+  visibleCometIndices = [];
+  for (let i = 0; i < comets.length; i++) {
+    if (passesFilter(comets[i])) visibleCometIndices.push(i);
+  }
+  const N = visibleCometIndices.length;
+  const positions = new Float32Array(N * 3);
+  const colors    = new Float32Array(N * 3);
+  for (let j = 0; j < N; j++) {
+    const c = comets[visibleCometIndices[j]];
+    positions[j*3 + 0] = c.sx;
+    positions[j*3 + 1] = c.sy;
+    positions[j*3 + 2] = c.sz;
+    const rgb = cometBand(c).rgbFloat;
+    colors[j*3 + 0] = rgb[0];
+    colors[j*3 + 1] = rgb[1];
+    colors[j*3 + 2] = rgb[2];
+  }
+  cometPoints.geometry.dispose();
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+  cometPoints.geometry = geo;
+
+  document.getElementById('comet-count').textContent = N.toLocaleString();
+
+  // Build / rebuild the merged orbit overlay if its toggle is on (default: on).
+  const orbitsToggle = document.getElementById('toggle-orbits');
+  if (orbitsToggle && orbitsToggle.checked) {
+    buildAllOrbitsMesh();
+    if (allCometOrbitsMesh) allCometOrbitsMesh.visible = true;
+  }
+}
+
+/* =========================================================================
+   POINTER + CLICK HANDLING (raycast against planets, sun, comets)
+   ========================================================================= */
+
+let pointerDownAt = null;
+
+function wirePointerInput() {
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerdown', (e) => {
+    pointerDownAt = { x: e.clientX, y: e.clientY, t: performance.now() };
+  });
+  canvas.addEventListener('pointerup', (e) => {
+    if (!pointerDownAt) return;
+    const dx = e.clientX - pointerDownAt.x;
+    const dy = e.clientY - pointerDownAt.y;
+    const dt = performance.now() - pointerDownAt.t;
+    pointerDownAt = null;
+    // Only treat as a click if there was minimal drag and minimal hold — drags should orbit, not click.
+    if (dx*dx + dy*dy < 25 && dt < 350) onCanvasClick(e);
+  });
+}
+
+function setPointerNDC(ev) {
+  pointerNDC.x = (ev.clientX / window.innerWidth) * 2 - 1;
+  pointerNDC.y = -(ev.clientY / window.innerHeight) * 2 + 1;
+}
+
+function pointThreshold() {
+  // Hit radius for THREE.Points raycasting — scales with how far we are from the action.
+  return Math.max(0.25, 0.5 * camera.position.length() / 50);
+}
+
+function onPointerMove(ev) {
+  setPointerNDC(ev);
+  raycaster.setFromCamera(pointerNDC, camera);
+  raycaster.params.Points = { threshold: pointThreshold() };
+  const targets = [sunHitMesh, ...planetMeshes.map(pm => pm.hitMesh)];
+  let hovered = raycaster.intersectObjects(targets).length > 0;
+  if (!hovered && cometPoints && cometPoints.geometry.attributes.position.count > 0) {
+    hovered = raycaster.intersectObject(cometPoints).length > 0;
+  }
+  canvas.style.cursor = hovered ? 'pointer' : '';
+}
+
+function onCanvasClick(ev) {
+  setPointerNDC(ev);
+  raycaster.setFromCamera(pointerNDC, camera);
+  raycaster.params.Points = { threshold: pointThreshold() };
+
+  // Planets first — they open the 3D detail overlay.
+  const planetHits = raycaster.intersectObjects(planetMeshes.map(pm => pm.hitMesh));
+  if (planetHits.length > 0 && planetHits[0].object.userData.planet) {
+    openPlanet3D(planetHits[0].object.userData.planet);
+    return;
+  }
+  // Sun opens its own detail view.
+  if (raycaster.intersectObject(sunHitMesh).length > 0) { openSun3D(); return; }
+
+  // Comet?
+  if (cometPoints && cometPoints.geometry.attributes.position.count > 0) {
+    const cometHits = raycaster.intersectObject(cometPoints);
+    if (cometHits.length > 0) {
+      const visIdx = cometHits[0].index;
+      const cometIdx = visibleCometIndices[visIdx];
+      if (cometIdx !== undefined) { selectComet(cometIdx); return; }
+    }
+  }
+  // Empty space — dismiss the current selection.
+  clearSelection();
+}
+
+/* =========================================================================
+   ANIMATION LOOP
+   ========================================================================= */
+
+const _labelVec = new THREE.Vector3();
+function updatePlanetLabels() {
+  for (const pm of planetMeshes) {
+    _labelVec.copy(pm.mesh.position).project(camera);
+    if (_labelVec.z > 1 || _labelVec.z < -1) { pm.labelEl.style.display = 'none'; continue; }
+    pm.labelEl.style.display = '';
+    const sx = (_labelVec.x * 0.5 + 0.5) * canvas.clientWidth;
+    const sy = (-_labelVec.y * 0.5 + 0.5) * canvas.clientHeight;
+    pm.labelEl.style.left = sx + 'px';
+    pm.labelEl.style.top = sy + 'px';
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+
+  if (starField) starField.rotation.y += 0.00005;
+
+  // Sun gently breathes — halo stays under Mercury's orbit (4.68 units).
+  if (sunGlow) {
+    const t = performance.now() * 0.0006;
+    sunGlow.scale.setScalar(7.2 + Math.sin(t) * 0.5);
+  }
+
+  // Spin the sun + each planet around its local Y at compressed-real rotation rates.
+  const _now = performance.now();
+  const _dt = (_now - (animate._last || _now)) / 1000;
+  animate._last = _now;
+  if (sunMesh) sunMesh.rotation.y += sceneSpinRate(25 * 24) * _dt;
+  for (const pm of planetMeshes) {
+    pm.mesh.rotation.y += (pm.mesh.userData.spinPerSec || 0) * _dt;
+  }
+  // Each moon orbits its parent via its pivot.
+  for (const mm of moons) {
+    mm.pivot.rotation.y += mm.angularSpeed * _dt;
+  }
+  // Selected comet halo — gentle, slow breathing.
+  if (selectedSprite && selectedSprite.visible) {
+    const t = performance.now() * 0.0014;
+    const s = 1.8 + Math.sin(t) * 0.25;
+    selectedSprite.scale.set(s, s, 1);
+  }
+
+  updatePlanetLabels();
+  updateTooltipPosition();
+
+  renderer.render(scene, camera);
+}
+
+/* =========================================================================
+   UI HOOKS
+   ========================================================================= */
+
+function zoomCamera(factor) {
+  const dir = camera.position.clone().sub(controls.target);
+  const newLen = dir.length() * factor;
+  if (newLen < controls.minDistance || newLen > controls.maxDistance) return;
+  dir.setLength(newLen);
+  camera.position.copy(controls.target).add(dir);
+  controls.update();
+}
+
+function wireUI() {
+  document.getElementById('zin').onclick  = () => zoomCamera(0.78);
+  document.getElementById('zout').onclick = () => zoomCamera(1.32);
+
+  document.getElementById('toggle-orbits').onchange = (e) => {
+    if (e.target.checked) {
+      buildAllOrbitsMesh();
+      if (allCometOrbitsMesh) allCometOrbitsMesh.visible = true;
+    } else if (allCometOrbitsMesh) {
+      allCometOrbitsMesh.visible = false;
+    }
+  };
+
+  document.getElementById('toggle-rings').onchange = (e) => {
+    for (const r of planetRingMeshes) r.visible = e.target.checked;
+  };
+
+  document.getElementById('toggle-labels').onchange = (e) => {
+    for (const pm of planetMeshes) pm.labelEl.style.opacity = e.target.checked ? '0.9' : '0';
+  };
+
+  document.querySelectorAll('#period-filter .filter-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('#period-filter .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.period;
+      refreshComets();
+    };
+  });
+
+  document.getElementById('tooltip-close').onclick = clearSelection;
+}
+
+/* =========================================================================
+   ORCHESTRATION
+   ========================================================================= */
+
+async function loadComets() {
+  try {
+    comets = await fetchComets();
+    if (comets.length === 0) {
+      showFallbackMessage('No comets returned. Showing planets only.');
+    } else {
+      refreshComets();
+    }
+  } catch (err) {
+    console.error('Failed to fetch JPL data:', err);
+    const hint = location.protocol === 'file:'
+      ? 'Open this page over http(s) — e.g. "npx wrangler pages dev ." or via the deployed Cloudflare Pages URL. JPL has no CORS headers, so file:// can\'t reach it.'
+      : 'JPL API unreachable. The /jpl proxy Function may be misconfigured or JPL is down.';
+    showFallbackMessage(hint);
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+  }
+}
+
+function showFallbackMessage(msg) {
+  document.getElementById('comet-count').textContent = '0';
+  const panel = document.getElementById('info-panel');
+  const note = document.createElement('div');
+  note.className = 'stat';
+  note.style.color = '#ff8c8c';
+  note.textContent = msg;
+  panel.appendChild(note);
+}
+
+/* =========================================================================
+   3D PLANET VIEW (Three.js)
+   ========================================================================= */
+
+const TEX_BASE = 'https://cdn.jsdelivr.net/gh/jeromeetienne/threex.planets@master/images/';
+// Earth from three.js examples — much higher-res continents + oceans.
+const EARTH_TEX = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/earth_atmos_2048.jpg';
+
+const PLANET_3D = {
+  Mercury: { tex: TEX_BASE + 'mercurymap.jpg', tilt: 0.03,  spinHrs: 1407.5, dayLabel: '58.6 days',          color: 0x9c9c9c },
+  Venus:   { tex: TEX_BASE + 'venusmap.jpg',   tilt: 177.4, spinHrs: -5832,  dayLabel: '243 days (retrograde)', color: 0xe8c87a },
+  Earth:   { tex: EARTH_TEX,                   tilt: 23.44, spinHrs: 23.93,  dayLabel: '23h 56m',            color: 0x4a90e2 },
+  Mars:    { tex: TEX_BASE + 'marsmap1k.jpg',  tilt: 25.19, spinHrs: 24.62,  dayLabel: '24h 37m',            color: 0xc1442e },
+  Jupiter: { tex: TEX_BASE + 'jupitermap.jpg', tilt: 3.13,  spinHrs: 9.93,   dayLabel: '9h 56m',             color: 0xd4a373 },
+  Saturn:  { tex: TEX_BASE + 'saturnmap.jpg',  tilt: 26.73, spinHrs: 10.66,  dayLabel: '10h 40m',
+             ring: TEX_BASE + 'saturnringcolor.jpg', color: 0xe8d090 },
+  Uranus:  { tex: TEX_BASE + 'uranusmap.jpg',  tilt: 97.77, spinHrs: -17.24, dayLabel: '17h 14m (retrograde)', color: 0x7fdbe0 },
+  Neptune: { tex: TEX_BASE + 'neptunemap.jpg', tilt: 28.32, spinHrs: 16.11,  dayLabel: '16h 6m',             color: 0x3f5fbf },
+};
+
+let p3 = {
+  renderer: null, scene: null, camera: null, controls: null,
+  planetMesh: null, ringMesh: null, starField: null,
+  rafId: null, resizeHandler: null, escHandler: null,
+  spinPerSec: 0,
+  disposables: [],
+};
+
+function ensureRenderer() {
+  if (p3.renderer) return;
+  const canvas = document.getElementById('planet3d-canvas');
+  p3.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  p3.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  p3.renderer.outputEncoding = THREE.sRGBEncoding;
+}
+
+function buildStars() {
+  const geo = new THREE.BufferGeometry();
+  const N = 1800;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    // Random point on a large sphere.
+    const r = 60 + Math.random() * 40;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    pos[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta);
+    pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i * 3 + 2] = r * Math.cos(phi);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.15, sizeAttenuation: true, transparent: true, opacity: 0.85 });
+  p3.disposables.push(geo, mat);
+  return new THREE.Points(geo, mat);
+}
+
+function buildSaturnRings(textureUrl) {
+  const innerR = 1.25;
+  const outerR = 2.3;
+  const geo = new THREE.RingGeometry(innerR, outerR, 128, 1);
+  // Remap UVs so the radial direction samples across the 1-D ring strip.
+  const pos = geo.attributes.position;
+  const uv  = geo.attributes.uv;
+  const v3 = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v3.fromBufferAttribute(pos, i);
+    const r = v3.length();
+    const t = (r - innerR) / (outerR - innerR);
+    uv.setXY(i, t, 0.5);
+  }
+
+  const loader = new THREE.TextureLoader();
+  loader.setCrossOrigin('anonymous');
+  const tex = loader.load(textureUrl);
+  tex.encoding = THREE.sRGBEncoding;
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    alphaMap: tex,        // dark gaps in the strip → transparent
+    transparent: true,
+    side: THREE.DoubleSide,
+    opacity: 0.95,
+    depthWrite: false,
+  });
+  p3.disposables.push(geo, mat, tex);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI / 2; // lay rings flat in the planet's equator
+  return mesh;
+}
+
+function fillInfoPanel(planet, info) {
+  document.getElementById('p3-eyebrow').textContent = 'Planet · ' + (PLANETS.indexOf(planet) + 1) + ' of 8';
+  document.getElementById('p3-name').textContent = planet.name;
+  document.getElementById('p3-a').textContent = planet.a.toFixed(2) + ' AU';
+  document.getElementById('p3-dist').textContent = (planet.a * 149.6).toFixed(1) + ' M km';
+  document.getElementById('p3-tilt').textContent = info.tilt.toFixed(1) + '°';
+  document.getElementById('p3-day').textContent = info.dayLabel;
+  document.getElementById('p3-desc').textContent = planet.fact;
+}
+
+function openPlanet3D(planet) {
+  const info = PLANET_3D[planet.name];
+  if (!info) return;
+
+  ensureRenderer();
+  tearDown3DScene(); // clean any prior planet
+
+  fillInfoPanel(planet, info);
+  const overlay = document.getElementById('planet3d');
+  overlay.classList.add('visible');
+  document.getElementById('planet3d-loader').classList.remove('hidden');
+
+  // Scene + camera
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000004);
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(0, 0.6, 4.2);
+
+  // Lights — directional acts as the Sun, soft ambient for the dark side.
+  const sun = new THREE.DirectionalLight(0xfff2d0, 1.6);
+  sun.position.set(5, 2, 4);
+  scene.add(sun);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+
+  // Stars
+  const stars = buildStars();
+  scene.add(stars);
+  p3.starField = stars;
+
+  // Planet sphere
+  const geo = new THREE.SphereGeometry(1, 96, 96);
+  const loader = new THREE.TextureLoader();
+  loader.setCrossOrigin('anonymous');
+  const tex = loader.load(
+    info.tex,
+    () => { document.getElementById('planet3d-loader').classList.add('hidden'); },
+    undefined,
+    (err) => {
+      console.warn('Texture failed, falling back to flat color', err);
+      document.getElementById('planet3d-loader').classList.add('hidden');
+    }
+  );
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = p3.renderer.capabilities.getMaxAnisotropy ? p3.renderer.capabilities.getMaxAnisotropy() : 1;
+
+  const mat = new THREE.MeshPhongMaterial({
+    map: tex,
+    color: 0xffffff,
+    shininess: planet.name === 'Earth' ? 14 : 5,
+    specular: 0x222222,
+  });
+
+  const planetMesh = new THREE.Mesh(geo, mat);
+  planetMesh.rotation.z = info.tilt * Math.PI / 180;
+  scene.add(planetMesh);
+
+  p3.disposables.push(geo, mat, tex);
+  p3.planetMesh = planetMesh;
+
+  // Saturn rings
+  if (info.ring) {
+    const ring = buildSaturnRings(info.ring);
+    planetMesh.add(ring);   // inherit tilt
+    p3.ringMesh = ring;
+  }
+
+  // Controls
+  const controls = new THREE.OrbitControls(camera, p3.renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.rotateSpeed = 0.55;
+  controls.minDistance = 1.6;
+  controls.maxDistance = 12;
+  controls.enablePan = false;
+
+  // Spin rate: full revolution per `spinHrs` real hours, compressed × 1000.
+  // Sign preserved so retrograde rotators spin the opposite way.
+  const compress = 1000;
+  p3.spinPerSec = (2 * Math.PI) / (info.spinHrs * 3600) * compress;
+
+  p3.scene = scene;
+  p3.camera = camera;
+  p3.controls = controls;
+
+  resize3D();
+  if (!p3.resizeHandler) {
+    p3.resizeHandler = () => resize3D();
+    window.addEventListener('resize', p3.resizeHandler);
+  }
+  if (!p3.escHandler) {
+    p3.escHandler = (e) => { if (e.key === 'Escape') closePlanet3D(); };
+    window.addEventListener('keydown', p3.escHandler);
+  }
+
+  let last = performance.now();
+  const tick = (now) => {
+    const dt = (now - last) / 1000; last = now;
+    if (p3.planetMesh) p3.planetMesh.rotation.y += p3.spinPerSec * dt;
+    if (p3.starField)  p3.starField.rotation.y += dt * 0.005;
+    p3.controls.update();
+    p3.renderer.render(p3.scene, p3.camera);
+    p3.rafId = requestAnimationFrame(tick);
+  };
+  p3.rafId = requestAnimationFrame(tick);
+}
+
+function resize3D() {
+  if (!p3.renderer || !p3.camera) return;
+  const w = window.innerWidth, h = window.innerHeight;
+  p3.renderer.setSize(w, h, false);
+  p3.camera.aspect = w / h;
+  p3.camera.updateProjectionMatrix();
+}
+
+function tearDown3DScene() {
+  if (p3.rafId) { cancelAnimationFrame(p3.rafId); p3.rafId = null; }
+  if (p3.controls) { p3.controls.dispose(); p3.controls = null; }
+  if (p3.scene) {
+    p3.scene.traverse(obj => {
+      if (obj.isMesh || obj.isPoints) {
+        if (obj.geometry) obj.geometry.dispose && obj.geometry.dispose();
+        if (obj.material) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          for (const m of mats) {
+            if (m.map) m.map.dispose && m.map.dispose();
+            if (m.alphaMap && m.alphaMap !== m.map) m.alphaMap.dispose && m.alphaMap.dispose();
+            m.dispose && m.dispose();
+          }
+        }
+      }
+    });
+  }
+  for (const d of p3.disposables) {
+    try { d.dispose && d.dispose(); } catch (e) {}
+  }
+  p3.disposables = [];
+  p3.scene = null;
+  p3.camera = null;
+  p3.planetMesh = null;
+  p3.ringMesh = null;
+  p3.starField = null;
+  p3.coronaSprites = null;
+}
+
+/* =========================================================================
+   3D SUN VIEW
+   ========================================================================= */
+
+function openSun3D() {
+  ensureRenderer();
+  tearDown3DScene();
+
+  // Info panel — bespoke copy since the Sun isn't part of PLANETS.
+  document.getElementById('p3-eyebrow').textContent = 'Star · Center of the solar system';
+  document.getElementById('p3-name').textContent = 'Sun';
+  document.getElementById('p3-a').textContent = '0 AU';
+  document.getElementById('p3-dist').textContent = '— · diameter 1,391,400 km';
+  document.getElementById('p3-tilt').textContent = '7.25° (to ecliptic)';
+  document.getElementById('p3-day').textContent = '~25 d (equator) / 35 d (poles)';
+  document.getElementById('p3-desc').textContent =
+    'G2V main-sequence star. Surface ≈ 5,778 K, core ≈ 15.7 M K. Fuses ~600 M tons of hydrogen per second; ~4.6 billion years old, roughly halfway through its main-sequence lifetime.';
+
+  const overlay = document.getElementById('planet3d');
+  overlay.classList.add('visible');
+  document.getElementById('planet3d-loader').classList.remove('hidden');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000004);
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(0, 0.6, 5.0);
+
+  // Stars
+  const stars = buildStars();
+  scene.add(stars);
+  p3.starField = stars;
+
+  // Sun sphere — emissive, no scene lighting required.
+  const geo = new THREE.SphereGeometry(1, 96, 96);
+  const loader = new THREE.TextureLoader();
+  loader.setCrossOrigin('anonymous');
+  const tex = loader.load(
+    TEX_BASE + 'sunmap.jpg',
+    () => { document.getElementById('planet3d-loader').classList.add('hidden'); },
+    undefined,
+    (err) => {
+      console.warn('Sun texture failed, falling back to flat color', err);
+      document.getElementById('planet3d-loader').classList.add('hidden');
+    }
+  );
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = p3.renderer.capabilities.getMaxAnisotropy ? p3.renderer.capabilities.getMaxAnisotropy() : 1;
+
+  const mat = new THREE.MeshBasicMaterial({ map: tex, color: 0xffffff });
+  const sunSphere = new THREE.Mesh(geo, mat);
+  sunSphere.rotation.z = 7.25 * Math.PI / 180;
+  scene.add(sunSphere);
+
+  // Layered corona: a soft outer halo + a tighter, brighter inner flare.
+  const coronaTex = makeGlowTexture(512, '#ff9d3f');
+  const innerGlowTex = makeGlowTexture(256, '#fff5d0');
+
+  const coronaMat = new THREE.SpriteMaterial({
+    map: coronaTex, color: 0xfdb813,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const corona = new THREE.Sprite(coronaMat);
+  corona.scale.set(3.6, 3.6, 1);
+  scene.add(corona);
+
+  const flareMat = new THREE.SpriteMaterial({
+    map: innerGlowTex, color: 0xfff5e0,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const flare = new THREE.Sprite(flareMat);
+  flare.scale.set(2.3, 2.3, 1);
+  scene.add(flare);
+
+  p3.disposables.push(geo, mat, tex, coronaMat, flareMat, coronaTex, innerGlowTex);
+  p3.planetMesh = sunSphere;
+  p3.coronaSprites = [corona, flare];
+
+  const controls = new THREE.OrbitControls(camera, p3.renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.rotateSpeed = 0.55;
+  controls.minDistance = 1.8;
+  controls.maxDistance = 14;
+  controls.enablePan = false;
+
+  // Solar rotation: 25 days at the equator → compressed ×1000.
+  p3.spinPerSec = (2 * Math.PI) / (25 * 24 * 3600) * 1000;
+
+  p3.scene = scene;
+  p3.camera = camera;
+  p3.controls = controls;
+
+  resize3D();
+  if (!p3.resizeHandler) {
+    p3.resizeHandler = () => resize3D();
+    window.addEventListener('resize', p3.resizeHandler);
+  }
+  if (!p3.escHandler) {
+    p3.escHandler = (e) => { if (e.key === 'Escape') closePlanet3D(); };
+    window.addEventListener('keydown', p3.escHandler);
+  }
+
+  let last = performance.now();
+  const tick = (now) => {
+    const dt = (now - last) / 1000; last = now;
+    if (p3.planetMesh) p3.planetMesh.rotation.y += p3.spinPerSec * dt;
+    if (p3.starField)  p3.starField.rotation.y += dt * 0.005;
+    if (p3.coronaSprites) {
+      const t = now * 0.001;
+      const s1 = 3.6 + Math.sin(t * 0.7) * 0.30;
+      const s2 = 2.3 + Math.sin(t * 1.1 + 1.2) * 0.18;
+      p3.coronaSprites[0].scale.set(s1, s1, 1);
+      p3.coronaSprites[1].scale.set(s2, s2, 1);
+    }
+    p3.controls.update();
+    p3.renderer.render(p3.scene, p3.camera);
+    p3.rafId = requestAnimationFrame(tick);
+  };
+  p3.rafId = requestAnimationFrame(tick);
+}
+
+function closePlanet3D() {
+  const overlay = document.getElementById('planet3d');
+  overlay.classList.remove('visible');
+  // Wait for fade-out before disposing, so the user doesn't see a black flash.
+  setTimeout(() => {
+    tearDown3DScene();
+    document.getElementById('planet3d-loader').classList.add('hidden');
+  }, 350);
+}
+
+document.getElementById('planet3d-close').addEventListener('click', closePlanet3D);
+document.getElementById('planet3d').addEventListener('click', (e) => {
+  // Click on bare backdrop also closes.
+  if (e.target.id === 'planet3d') closePlanet3D();
+});
+
+/* ---------- Intro modal ---------- */
+function hideIntro() {
+  document.getElementById('intro').classList.add('hidden');
+}
+document.getElementById('intro-button').addEventListener('click', hideIntro);
+document.getElementById('intro').addEventListener('click', (e) => {
+  // Backdrop click (anywhere outside the card) closes too.
+  if (e.target.id === 'intro') hideIntro();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !document.getElementById('intro').classList.contains('hidden')) {
+    hideIntro();
+  }
+});
+
+initSpace();
+</script>
+</body>
+</html>
